@@ -60,6 +60,12 @@ public class Configuration : IPluginConfiguration
     public float TopIgnore { get; set; } = 0.08f;
     public float BottomIgnore { get; set; } = 0.62f;
 
+    // MGC vendor, saved from the player's target.
+    public string VendorName { get; set; } = "";
+    public uint VendorBaseId { get; set; }
+    public System.Numerics.Vector3 VendorPosition { get; set; }
+    public ushort VendorTerritory { get; set; }
+
     public void Save() => Plugin.PluginInterface.SavePluginConfig(this);
 }
 

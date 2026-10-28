@@ -90,7 +90,10 @@ public sealed class MainWindow : Window
 
         ImGui.Spacing();
         if (ImGui.CollapsingHeader("Rewards"))
+        {
+            DrawVendor(cfg);
             DrawRewards(cfg);
+        }
         if (ImGui.CollapsingHeader("Settings"))
             DrawSettings(cfg);
         if (plugin.ShowDebug && ImGui.CollapsingHeader("UI scanner (debug)"))
@@ -228,6 +231,28 @@ public sealed class MainWindow : Window
             ImGui.TextDisabled("Enough MGC for everything you picked.");
         else if (avg > 0)
             ImGui.TextDisabled($"About {Math.Ceiling(shortfall / avg)} more runs.");
+    }
+
+    private void DrawVendor(Configuration cfg)
+    {
+        var vendor = plugin.Vendor;
+        ImGui.TextUnformatted(cfg.VendorBaseId == 0 ? "Vendor: not set" : $"Vendor: {cfg.VendorName}");
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Use my target"))
+            vendor.RememberTarget();
+
+        if (vendor.Busy)
+        {
+            if (ImGui.Button("Stop walking", new Vector2(-1, 30))) vendor.Stop();
+        }
+        else
+        {
+            if (ImGui.Button("Walk to vendor and open shop", new Vector2(-1, 30))) vendor.Start();
+        }
+        if (!VendorRunner.VnavmeshInstalled)
+            ImGui.TextDisabled("Needs the vnavmesh plugin to walk (talking works without it when you stand close).");
+        if (vendor.Status.Length > 0)
+            ImGui.TextDisabled(vendor.Status);
     }
 
     private void DrawRewards(Configuration cfg)

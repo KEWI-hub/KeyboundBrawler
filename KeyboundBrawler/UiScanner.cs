@@ -133,6 +133,32 @@ public static unsafe class UiScanner
         }
     }
 
+    // The values an addon was opened with (item names, prices, flags); buying is driven by these indexes.
+    public static List<string> AtkValues(string addonName)
+    {
+        var lines = new List<string>();
+        ForEachUnit(addonName, unit =>
+        {
+            lines.Add($"--- {addonName} AtkValues ({unit->AtkValuesCount}) ---");
+            for (var i = 0; i < unit->AtkValuesCount; i++)
+            {
+                var v = unit->AtkValues[i];
+                var text = v.Type switch
+                {
+                    AtkValueType.Int => v.Int.ToString(),
+                    AtkValueType.UInt => v.UInt.ToString(),
+                    AtkValueType.Bool => v.Byte.ToString(),
+                    AtkValueType.String or
+                    AtkValueType.ManagedString or
+                    AtkValueType.String8 => v.String.ToString(),
+                    _ => "",
+                };
+                lines.Add($"{i}	{v.Type}	{text}");
+            }
+        });
+        return lines;
+    }
+
     private delegate void UnitAction(AtkUnitBase* unit);
 
     private static void ForEachUnit(string addonName, UnitAction action)

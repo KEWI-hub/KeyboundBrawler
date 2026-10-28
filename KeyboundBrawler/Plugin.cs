@@ -23,12 +23,16 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static ITextureProvider TextureProvider { get; private set; } = null!;
+    [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
+    [PluginService] internal static ITargetManager TargetManager { get; private set; } = null!;
+    [PluginService] internal static IClientState ClientState { get; private set; } = null!;
 
     public Configuration Config { get; }
     public int SessionRuns { get; set; }
     public int SessionMgc { get; set; }
     public AutoPlayer AutoPlayer { get; }
     public MatchWatcher MatchWatcher { get; }
+    public VendorRunner Vendor { get; }
 
     // "/kbb debug" shows the UI scanner, which normal players do not need.
     public bool ShowDebug { get; set; }
@@ -87,6 +91,7 @@ public sealed class Plugin : IDalamudPlugin
         mgcRegex = BuildRegex(Config.MgcPattern);
         AutoPlayer = new AutoPlayer(this);
         MatchWatcher = new MatchWatcher(this);
+        Vendor = new VendorRunner(this);
 
         mainWindow = new MainWindow(this);
         windowSystem.AddWindow(mainWindow);
@@ -104,6 +109,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        Vendor.Dispose();
         MatchWatcher.Dispose();
         AutoPlayer.Dispose();
         ChatGui.ChatMessage -= OnChatMessage;
