@@ -256,6 +256,10 @@ public sealed class MainWindow : Window
         }
         var autoBuy = cfg.AutoBuy;
         if (ImGui.Checkbox("Buy wanted rewards when the shop opens", ref autoBuy)) { cfg.AutoBuy = autoBuy; cfg.Save(); }
+        var clickTabs = cfg.ClickShopTabs;
+        if (ImGui.Checkbox("Switch shop tabs for me (experimental)", ref clickTabs)) { cfg.ClickShopTabs = clickTabs; cfg.Save(); }
+        if (!cfg.ClickShopTabs)
+            ImGui.TextDisabled("You click the tab, the plugin buys what is on it.");
         if (!VendorRunner.VnavmeshInstalled)
             ImGui.TextDisabled("Needs the vnavmesh plugin to walk (talking works without it when you stand close).");
         if (vendor.Status.Length > 0)

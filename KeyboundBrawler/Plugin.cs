@@ -86,6 +86,13 @@ public sealed class Plugin : IDalamudPlugin
             Config.Version = 6;
             Config.Save();
         }
+        if (Config.Version < 7)
+        {
+            // 0.6.1 crashed the game on the first tab click; buying waits for an explicit press again.
+            Config.AutoBuy = false;
+            Config.Version = 7;
+            Config.Save();
+        }
         // Loading appends saved list items onto the defaults, so drop the repeats.
         Config.DangerCasts = Config.DangerCasts.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         Config.UrgentCasts = Config.UrgentCasts.Distinct(StringComparer.OrdinalIgnoreCase).ToList();

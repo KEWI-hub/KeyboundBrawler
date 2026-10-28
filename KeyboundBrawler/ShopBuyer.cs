@@ -16,6 +16,8 @@ public sealed unsafe class ShopBuyer : IDisposable
     private const int TabValue = 1, RowCountValue = 4, MgcValue = 86, FirstNameValue = 90;
     private static readonly string[] ConfirmAddons = ["SelectYesno", "ShopExchangeCurrencyDialog"];
 
+    private static readonly string[] TabNames = ["Weapons", "Armor", "Accessories", "Others"];
+
     private enum Step { Idle, SwitchTab, Buy, Confirm, Verify }
 
     private readonly Plugin plugin;
@@ -64,6 +66,12 @@ public sealed unsafe class ShopBuyer : IDisposable
         {
             case Step.SwitchTab:
                 if (UInt(shop, TabValue) == current!.Tab) { SetStep(Step.Buy); break; }
+                if (!plugin.Config.ClickShopTabs)
+                {
+                    // Safe mode: wait for the player to click the tab themselves.
+                    Status = $"Click the \"{TabNames[current.Tab]}\" tab to buy {current.Name}";
+                    break;
+                }
                 if (elapsed > 3000) { Fail("Could not switch to the right tab."); break; }
                 if (!tabRequested)
                 {
@@ -174,7 +182,9 @@ public sealed unsafe class ShopBuyer : IDisposable
         for (var e = evt; e != null; e = e->NextEvent)
             if (e->State.EventType == AtkEventType.ButtonClick) { evt = e; break; }
         if (evt == null) return false;
-        shop->ReceiveEvent((AtkEventType)evt->State.EventType, (int)evt->Param, evt);
+        // The handler reads the event data, so it must point at real (zeroed) memory; null crashes the game.
+        var data = default(AtkEventData);
+        shop->ReceiveEvent((AtkEventType)evt->State.EventType, (int)evt->Param, evt, &data);
         Plugin.Log.Info($"[shop] clicked tab {tab} (event {evt->State.EventType}, param {evt->Param})");
         return true;
     }

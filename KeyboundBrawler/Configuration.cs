@@ -7,7 +7,7 @@ namespace KeyboundBrawler;
 [Serializable]
 public class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 6;
+    public int Version { get; set; } = 7;
 
     // MGC the player currently holds. Entered by hand once, then grows with every win.
     public int CurrentMgc { get; set; }
@@ -66,7 +66,9 @@ public class Configuration : IPluginConfiguration
     public System.Numerics.Vector3 VendorPosition { get; set; }
     public ushort VendorTerritory { get; set; }
     // Buy the wanted rewards as soon as the walk opens the shop.
-    public bool AutoBuy { get; set; } = true;
+    public bool AutoBuy { get; set; }
+    // Clicking the shop's tab buttons for the player crashed the game once (0.6.1); off until proven safe.
+    public bool ClickShopTabs { get; set; }
 
     public void Save() => Plugin.PluginInterface.SavePluginConfig(this);
 }
