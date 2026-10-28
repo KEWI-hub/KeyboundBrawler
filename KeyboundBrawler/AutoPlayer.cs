@@ -63,6 +63,11 @@ public sealed class AutoPlayer : IDisposable
     }
     public IReadOnlyList<UiText> LastTargets { get; private set; } = [];
 
+    // For the window: the phrase in progress, the keys that make it up, and how many are sent.
+    public string? CurrentWord => typing;
+    public string CurrentKeys => keys;
+    public int TypedCount => typedCount;
+
     public AutoPlayer(Plugin plugin)
     {
         this.plugin = plugin;

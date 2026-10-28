@@ -22,12 +22,16 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
+    [PluginService] internal static ITextureProvider TextureProvider { get; private set; } = null!;
 
     public Configuration Config { get; }
     public int SessionRuns { get; set; }
     public int SessionMgc { get; set; }
     public AutoPlayer AutoPlayer { get; }
     public MatchWatcher MatchWatcher { get; }
+
+    // "/kbb debug" shows the UI scanner, which normal players do not need.
+    public bool ShowDebug { get; set; }
 
     private readonly WindowSystem windowSystem = new("KeyboundBrawler");
     private readonly MainWindow mainWindow;
@@ -119,6 +123,12 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnCommand(string command, string args)
     {
+        if (args.Trim().Equals("debug", StringComparison.OrdinalIgnoreCase))
+        {
+            ShowDebug = !ShowDebug;
+            mainWindow.IsOpen = true;
+            return;
+        }
         if (args.Trim().Equals("auto", StringComparison.OrdinalIgnoreCase))
         {
             AutoPlayer.Toggle();
