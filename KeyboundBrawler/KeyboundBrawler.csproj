@@ -1,6 +1,6 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.5.0.0</Version>
+    <Version>0.6.0.0</Version>
     <Authors>KEWI</Authors>
     <Description>Auto-play and MGC tracker for the Keybound Brawler Gold Saucer event.</Description>
     <PackageProjectUrl>https://github.com/KEWI-hub/KeyboundBrawler</PackageProjectUrl>

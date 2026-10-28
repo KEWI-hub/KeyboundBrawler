@@ -241,18 +241,27 @@ public sealed class MainWindow : Window
         if (ImGui.SmallButton("Use my target"))
             vendor.RememberTarget();
 
-        if (vendor.Busy)
+        var shop = plugin.Shop;
+        if (vendor.Busy || shop.Busy)
         {
-            if (ImGui.Button("Stop walking", new Vector2(-1, 30))) vendor.Stop();
+            if (ImGui.Button("Stop", new Vector2(-1, 30))) { vendor.Stop(); shop.Stop(); }
+        }
+        else if (ShopBuyer.ShopOpen)
+        {
+            if (ImGui.Button("Buy wanted rewards now", new Vector2(-1, 30))) shop.Start();
         }
         else
         {
-            if (ImGui.Button("Walk to vendor and open shop", new Vector2(-1, 30))) vendor.Start();
+            if (ImGui.Button(cfg.AutoBuy ? "Walk to vendor and buy" : "Walk to vendor and open shop", new Vector2(-1, 30))) vendor.Start();
         }
+        var autoBuy = cfg.AutoBuy;
+        if (ImGui.Checkbox("Buy wanted rewards when the shop opens", ref autoBuy)) { cfg.AutoBuy = autoBuy; cfg.Save(); }
         if (!VendorRunner.VnavmeshInstalled)
             ImGui.TextDisabled("Needs the vnavmesh plugin to walk (talking works without it when you stand close).");
         if (vendor.Status.Length > 0)
             ImGui.TextDisabled(vendor.Status);
+        if (shop.Status.Length > 0)
+            ImGui.TextDisabled(shop.Status);
     }
 
     private void DrawRewards(Configuration cfg)

@@ -65,6 +65,8 @@ public class Configuration : IPluginConfiguration
     public uint VendorBaseId { get; set; }
     public System.Numerics.Vector3 VendorPosition { get; set; }
     public ushort VendorTerritory { get; set; }
+    // Buy the wanted rewards as soon as the walk opens the shop.
+    public bool AutoBuy { get; set; } = true;
 
     public void Save() => Plugin.PluginInterface.SavePluginConfig(this);
 }

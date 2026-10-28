@@ -33,6 +33,7 @@ public sealed class Plugin : IDalamudPlugin
     public AutoPlayer AutoPlayer { get; }
     public MatchWatcher MatchWatcher { get; }
     public VendorRunner Vendor { get; }
+    public ShopBuyer Shop { get; }
 
     // "/kbb debug" shows the UI scanner, which normal players do not need.
     public bool ShowDebug { get; set; }
@@ -92,6 +93,7 @@ public sealed class Plugin : IDalamudPlugin
         AutoPlayer = new AutoPlayer(this);
         MatchWatcher = new MatchWatcher(this);
         Vendor = new VendorRunner(this);
+        Shop = new ShopBuyer(this);
 
         mainWindow = new MainWindow(this);
         windowSystem.AddWindow(mainWindow);
@@ -109,6 +111,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        Shop.Dispose();
         Vendor.Dispose();
         MatchWatcher.Dispose();
         AutoPlayer.Dispose();

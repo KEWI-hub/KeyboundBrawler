@@ -150,7 +150,7 @@ public static unsafe class UiScanner
                     AtkValueType.Bool => v.Byte.ToString(),
                     AtkValueType.String or
                     AtkValueType.ManagedString or
-                    AtkValueType.String8 => v.String.ToString(),
+                    AtkValueType.ConstString => v.String.ToString(),
                     _ => "",
                 };
                 lines.Add($"{i}	{v.Type}	{text}");
