@@ -21,6 +21,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
+    [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
 
     public Configuration Config { get; }
     public int SessionRuns { get; set; }
@@ -67,6 +68,13 @@ public sealed class Plugin : IDalamudPlugin
             Config.WordDelayMs = 75;
             Config.RetryAfterMs = 1000;
             Config.Version = 5;
+            Config.Save();
+        }
+        if (Config.Version < 6)
+        {
+            // Speed presets replace hand-tuned sliders; Cursed Gaze / Sensory Jammer are now built in.
+            Config.ApplySpeed(Config.Speed);
+            Config.Version = 6;
             Config.Save();
         }
         // Loading appends saved list items onto the defaults, so drop the repeats.

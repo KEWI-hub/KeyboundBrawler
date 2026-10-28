@@ -25,12 +25,15 @@ Tick **Start auto-play when a match begins** and it starts and stops by itself.
 
 ## What auto-play does
 
-- Reads enemy words from the `KTGEWord` addon and types them, about 62 WPM by default
+- Reads enemy words from the `KTGEWord` addon and types them
+- Speed presets: Human 60, Programmer 90, Monkey 100, KEWI 270 WPM
 - Opens the input box with Enter before each word (the box closes after every submit)
-- Types red / gold casting labels first (`Needles`, `Burst`)
-- Stops pressing keys while a no-typing cast is up, if listed (e.g. `Cursed Gaze, Sensory Jammer`)
+- Never types while chat or another text box has focus
+- Priority by label colour: green barrier phrases, then red, then gold casters, then the closest enemy
+- Holds every key during Cursed Gaze / Dynamic Sensory Jammer (the crossed-out keyboard sign)
 - Remembers boss words before they get obscured
-- Keeps the duty's inactivity timer reset, so you are not expelled for "extended inactivity"
+- Optional: skip the punctuation the game does not require ( ? ! - ' )
+- Resets the duty's inactivity timer on every key it sends, so you are not expelled for "extended inactivity"
 
 ## Tracker
 

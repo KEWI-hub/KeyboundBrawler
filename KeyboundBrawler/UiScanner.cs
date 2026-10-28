@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
@@ -7,7 +8,10 @@ namespace KeyboundBrawler;
 // LabelVisible: everything above the text node is shown. TextVisible: the text node itself is shown too.
 public readonly record struct UiText(
     string Addon, uint NodeId, string Text, float X, float Y, byte FontSize, uint Color, int Depth,
-    nint Key, bool LabelVisible, bool TextVisible);
+    nint Key, bool LabelVisible, bool TextVisible, LabelTint Tint = LabelTint.None);
+
+// Colour of a KTGEWord label, read from the AddRGB tint on its background (node #26).
+public enum LabelTint { None, Blue, Gray, Red, Gold, Green }
 
 // Reads text straight out of the game's UI tree.
 public static unsafe class UiScanner
@@ -45,9 +49,40 @@ public static unsafe class UiScanner
         {
             var unit = list.Entries[i].Value;
             if (unit == null || !unit->IsVisible || unit->NameString != addonName) continue;
-            Walk(addonName, &unit->UldManager, 0, result);
+            Walk(addonName, &unit->UldManager, 0, result, LabelTint.None);
         }
         return result;
+    }
+
+    // Tints seen in match dumps: blue = plain enemy, gray = matches what is typed, red = "1000 Needles",
+    // gold = other casts (Germinate, Tankbuster, Self-destruct), green = barrier phrase.
+    private static readonly (LabelTint Tint, int R, int G, int B)[] KnownTints =
+    [
+        (LabelTint.Blue, -255, -255, 0),
+        (LabelTint.Gray, -160, -160, -160),
+        (LabelTint.Red, -128, -255, -255),
+        (LabelTint.Gold, -200, -200, -255),
+        (LabelTint.Green, -255, -200, -255),
+    ];
+
+    private const uint LabelBackgroundNode = 26;
+
+    private static LabelTint TintOf(AtkUldManager* uld)
+    {
+        for (var i = 0; i < uld->NodeListCount; i++)
+        {
+            var node = uld->NodeList[i];
+            if (node == null || node->NodeId != LabelBackgroundNode) continue;
+            var best = LabelTint.None;
+            var bestDistance = int.MaxValue;
+            foreach (var k in KnownTints)
+            {
+                var d = Math.Abs(node->AddRed - k.R) + Math.Abs(node->AddGreen - k.G) + Math.Abs(node->AddBlue - k.B);
+                if (d < bestDistance) (best, bestDistance) = (k.Tint, d);
+            }
+            return bestDistance <= 60 ? best : LabelTint.None;
+        }
+        return LabelTint.None;
     }
 
     public static (string Path, int Count) DumpToFile(string tag)
@@ -73,7 +108,7 @@ public static unsafe class UiScanner
         return (path, lines.Count);
     }
 
-    private static void Walk(string addon, AtkUldManager* uld, int depth, List<UiText> result)
+    private static void Walk(string addon, AtkUldManager* uld, int depth, List<UiText> result, LabelTint tint)
     {
         if (depth > 8) return;
         for (var i = 0; i < uld->NodeListCount; i++)
@@ -87,13 +122,13 @@ public static unsafe class UiScanner
                 var c = text->TextColor;
                 result.Add(new UiText(addon, node->NodeId, text->NodeText.ToString(), node->ScreenX, node->ScreenY, text->FontSize,
                     (uint)(c.R << 24 | c.G << 16 | c.B << 8 | c.A), depth,
-                    (nint)node, IsReallyVisible(node->ParentNode), node->IsVisible() && node->Alpha_2 != 0));
+                    (nint)node, IsReallyVisible(node->ParentNode), node->IsVisible() && node->Alpha_2 != 0, tint));
             }
             else if ((ushort)node->Type >= 1000)
             {
                 var component = ((AtkComponentNode*)node)->Component;
                 if (component != null)
-                    Walk(addon, &component->UldManager, depth + 1, result);
+                    Walk(addon, &component->UldManager, depth + 1, result, TintOf(&component->UldManager));
             }
         }
     }

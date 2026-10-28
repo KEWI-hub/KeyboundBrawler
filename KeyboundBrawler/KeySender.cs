@@ -28,7 +28,11 @@ public static class KeySender
         }
     }
 
-    public static void Char(char c) => PostMessageW(Window, WmChar, c, 1);
+    public static void Char(char c)
+    {
+        GameInput.MarkActive();
+        PostMessageW(Window, WmChar, c, 1);
+    }
 
     public static void Enter() => Key(VkReturn, 0x1C);
 
@@ -42,6 +46,7 @@ public static class KeySender
 
     private static void Key(int vk, int scanCode)
     {
+        GameInput.MarkActive();
         PostMessageW(Window, WmKeyDown, vk, 1 | scanCode << 16);
         PostMessageW(Window, WmKeyUp, vk, unchecked((int)0xC0000001) | scanCode << 16);
     }

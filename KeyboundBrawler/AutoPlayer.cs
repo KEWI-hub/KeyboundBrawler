@@ -14,6 +14,9 @@ public sealed class AutoPlayer : IDisposable
         @"^(HP|SCORE|BONUS|Burst|X\d+(\.\d+)?|[\d,]+(/\d+)?)$|\[Enter\]|Defeat .*enem|Inputs (dis|re-en)abled|Barrier reinforced|reinforcements fade",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
+    // The game accepts phrases without these, so they can be left out to save keystrokes.
+    private static readonly Regex OptionalPunctuation = new(@"[?!'\-]", RegexOptions.CultureInvariant);
+
     // A word label whose text is blanked or covered up, e.g. "", "???" or "****".
     private static readonly Regex Masked = new(@"^[\?？\*＊・…_\-\s]*$", RegexOptions.CultureInvariant);
 
@@ -21,6 +24,9 @@ public sealed class AutoPlayer : IDisposable
     public const string WordAddon = "KTGEWord";
     private const string InputAddon = "KTGInput";
     private const uint InputTextNode = 16;
+    private const string CastBarAddon = "KTGEnemyCastBar";
+    private const uint CastNameNode = 4;
+    private const int LetterlockTailMs = 1500;
 
     private readonly Plugin plugin;
     private readonly Dictionary<string, DateTime> recentlySent = [];
@@ -35,6 +41,9 @@ public sealed class AutoPlayer : IDisposable
     private const int OpenBoxDelayMs = 120;
 
     private string? typing;
+    // What actually gets typed for `typing`: the same, minus optional punctuation when that is skipped.
+    private string keys = "";
+    private DateTime dangerUntil = DateTime.MinValue;
     private int typedCount;
     private DateTime nextAction = DateTime.MinValue;
 
@@ -69,21 +78,9 @@ public sealed class AutoPlayer : IDisposable
         Status = Enabled ? "Waiting for the minigame" : "Off";
     }
 
-    // Keys posted to the window type fine but do not count as activity, so the duty kicks us
-    // for "extended inactivity". Reset the game's idle timers while auto-play runs.
-    private static unsafe void KeepActive()
-    {
-        var timers = FFXIVClientStructs.FFXIV.Client.UI.UIModule.Instance()->GetInputTimerModule();
-        if (timers == null) return;
-        timers->AfkTimer = 0;
-        timers->ContentInputTimer = 0;
-        timers->InputTimer = 0;
-    }
-
     private void OnUpdate(IFramework framework)
     {
         if (!Enabled) return;
-        KeepActive();
 
         var cfg = plugin.Config;
         var addons = cfg.GameAddons.Append(WordAddon).Distinct();
@@ -104,6 +101,14 @@ public sealed class AutoPlayer : IDisposable
         var now = DateTime.UtcNow;
         if (now < nextAction) return;
 
+        // Never send a key while chat or any other text box has focus, or a phrase could land in chat.
+        if (!GameInput.SafeToType())
+        {
+            mismatchSince = null;
+            Status = "Paused: another text box has focus";
+            return;
+        }
+
         // Crossed-out keyboard sign: any key press now explodes and locks input, so wait it out untouched.
         if (noTypingSign)
         {
@@ -118,7 +123,7 @@ public sealed class AutoPlayer : IDisposable
         if (typing != null && LastTargets.All(t => t.Text != typing))
         {
             // Also record the first few of these: if the boss hides its whole label, this is where it shows up.
-            if (typedCount > 0 && typedCount < typing.Length && vanishDumps < 3 && cfg.AutoDump)
+            if (typedCount > 0 && typedCount < keys.Length && vanishDumps < 3 && cfg.AutoDump)
             {
                 vanishDumps++;
                 UiScanner.DumpToFile("vanish");
@@ -143,6 +148,7 @@ public sealed class AutoPlayer : IDisposable
                 return;
             }
             typing = next.Text;
+            keys = cfg.SkipOptionalPunctuation ? OptionalPunctuation.Replace(typing, "") : typing;
             typedCount = 0;
 
             // The box closes after every submit (and starts closed), so open it before the first letter.
@@ -156,11 +162,11 @@ public sealed class AutoPlayer : IDisposable
             }
         }
 
-        if (typedCount < typing.Length)
+        if (typedCount < keys.Length)
         {
-            KeySender.Char(typing[typedCount++]);
+            KeySender.Char(keys[typedCount++]);
             Status = $"Typing \"{typing}\"";
-            Delay(cfg.WordSeconds > 0 ? (int)(cfg.WordSeconds * 1000 / (typing.Length + 1)) : cfg.CharDelayMs);
+            Delay(cfg.WordSeconds > 0 ? (int)(cfg.WordSeconds * 1000 / (keys.Length + 1)) : cfg.CharDelayMs);
             return;
         }
 
@@ -177,7 +183,7 @@ public sealed class AutoPlayer : IDisposable
     private bool SyncWithInputBox(DateTime now)
     {
         var input = UiScanner.Texts(InputAddon).FirstOrDefault(t => t.NodeId == InputTextNode).Text ?? "";
-        var expected = typing == null ? "" : typing[..typedCount];
+        var expected = typing == null ? "" : keys[..typedCount];
         if (input == expected)
         {
             mismatchSince = null;
@@ -271,8 +277,12 @@ public sealed class AutoPlayer : IDisposable
         var ignore = cfg.IgnoreWords;
         var ktgTexts = UiScanner.VisibleAddons().Where(n => n.StartsWith("KTG")).Distinct().SelectMany(UiScanner.Texts).ToList();
         // No-entry sign: typing that enemy's word gets punished.
-        var danger = CastsNamed(ktgTexts, cfg.DangerCasts);
-        noTypingSign = danger.Count > 0;
+        var danger = CastsNamed(ktgTexts, cfg.DangerCasts)
+            .Concat(ktgTexts.Where(t => t.Addon == CastBarAddon && t.NodeId == CastNameNode && GameInput.IsLetterlock(t.Text)))
+            .ToList();
+        // The punishment window runs a little past the cast bar, until the gaze lands.
+        if (danger.Count > 0) dangerUntil = DateTime.UtcNow.AddMilliseconds(LetterlockTailMs);
+        noTypingSign = DateTime.UtcNow < dangerUntil;
         // Red / gold labels: interrupt these before anything else.
         var urgent = CastsNamed(ktgTexts, cfg.UrgentCasts);
         if ((danger.Count > 0 || urgent.Count > 0) && castDumps < 3 && cfg.AutoDump)
@@ -288,12 +298,21 @@ public sealed class AutoPlayer : IDisposable
             .Where(t => t.Y > cfg.TopIgnore * height && t.Y < cfg.BottomIgnore * height)
             .Where(t => !cfg.DangerCasts.Any(d => t.Text.Contains(d, StringComparison.OrdinalIgnoreCase)))
             .Where(t => !cfg.UrgentCasts.Contains(t.Text, StringComparer.OrdinalIgnoreCase))
-            // Hidden (memorised) words first, before we forget them; then lower on screen, i.e. closer enemies.
-            .OrderByDescending(t => NearCast(t, urgent))
+            // Barrier phrases first, then casters (red, then gold), then words we only remember,
+            // then closer enemies (lower on screen).
+            .OrderBy(t => Rank(t, urgent))
             .ThenBy(t => t.TextVisible)
             .ThenByDescending(t => t.Y)
             .ToList();
     }
+
+    private static int Rank(UiText t, List<UiText> urgent) => t.Tint switch
+    {
+        LabelTint.Green => 0,
+        LabelTint.Red => 1,
+        LabelTint.Gold => 2,
+        _ => NearCast(t, urgent) ? 2 : 3,
+    };
 
     private static unsafe float ScreenHeight()
     {
@@ -314,6 +333,7 @@ public sealed class AutoPlayer : IDisposable
     private void ResetTyping()
     {
         typing = null;
+        keys = "";
         typedCount = 0;
     }
 }

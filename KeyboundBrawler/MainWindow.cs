@@ -141,6 +141,25 @@ public sealed class MainWindow : Window
         ImGui.SameLine();
         ImGui.TextUnformatted(auto.Status);
 
+        ImGui.TextUnformatted("Speed:");
+        foreach (var speed in new[] { TypingSpeed.Human, TypingSpeed.Programmer, TypingSpeed.Monkey, TypingSpeed.Kewi })
+        {
+            ImGui.SameLine();
+            if (ImGui.RadioButton($"{speed.Label()} {speed.Wpm()}##speed", cfg.Speed == speed))
+            {
+                cfg.ApplySpeed(speed);
+                cfg.Save();
+            }
+        }
+        if (cfg.Speed == TypingSpeed.Custom)
+        {
+            ImGui.SameLine();
+            ImGui.TextDisabled("(custom)");
+        }
+
+        var skipPunct = cfg.SkipOptionalPunctuation;
+        if (ImGui.Checkbox("Skip optional punctuation ( ? ! - ' )", ref skipPunct)) { cfg.SkipOptionalPunctuation = skipPunct; cfg.Save(); }
+
         var autoStart = cfg.AutoStart;
         if (ImGui.Checkbox("Start auto-play when a match begins", ref autoStart)) { cfg.AutoStart = autoStart; cfg.Save(); }
         var autoDump = cfg.AutoDump;
@@ -169,15 +188,15 @@ public sealed class MainWindow : Window
         var changed = false;
         var wordSeconds = cfg.WordSeconds;
         ImGui.SetNextItemWidth(200);
-        if (ImGui.SliderFloat("Seconds per word (0 = use letter delay)", ref wordSeconds, 0f, 6f, "%.1f")) { cfg.WordSeconds = wordSeconds; changed = true; }
+        if (ImGui.SliderFloat("Seconds per word (0 = use letter delay)", ref wordSeconds, 0f, 6f, "%.1f")) { cfg.WordSeconds = wordSeconds; cfg.Speed = TypingSpeed.Custom; changed = true; }
 
         var charDelay = cfg.CharDelayMs;
         ImGui.SetNextItemWidth(200);
-        if (ImGui.SliderInt("Delay per letter (ms)", ref charDelay, 0, 300)) { cfg.CharDelayMs = charDelay; changed = true; }
+        if (ImGui.SliderInt("Delay per letter (ms)", ref charDelay, 0, 300)) { cfg.CharDelayMs = charDelay; cfg.Speed = TypingSpeed.Custom; changed = true; }
 
         var wordDelay = cfg.WordDelayMs;
         ImGui.SetNextItemWidth(200);
-        if (ImGui.SliderInt("Delay after Enter (ms)", ref wordDelay, 0, 1000)) { cfg.WordDelayMs = wordDelay; changed = true; }
+        if (ImGui.SliderInt("Delay after Enter (ms)", ref wordDelay, 0, 1000)) { cfg.WordDelayMs = wordDelay; cfg.Speed = TypingSpeed.Custom; changed = true; }
 
         var retry = cfg.RetryAfterMs;
         ImGui.SetNextItemWidth(200);
