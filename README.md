@@ -2,6 +2,8 @@
 
 # Keybound Brawler Helper
 
+[![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/kewiv)
+
 Dalamud plugin for the **Keybound Brawler** Gold Saucer event (FFXIV × FFVII Remake).
 
 > ⚠️ Auto-play is against the FFXIV Terms of Service. Use at your own risk.
@@ -41,3 +43,8 @@ dotnet build -c Release
 ```
 
 Needs the .NET 10 SDK and XIVLauncher with Dalamud installed. Output: `KeyboundBrawler/bin/x64/Release/KeyboundBrawler/latest.zip`.
+
+## Support
+
+This plugin is free. If it saved you some typing, you can buy me a coffee at
+**[ko-fi.com/kewiv](https://ko-fi.com/kewiv)**. Entirely optional.
