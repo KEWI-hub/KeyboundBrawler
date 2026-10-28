@@ -26,7 +26,8 @@ public sealed class AutoPlayer : IDisposable
     private const uint InputTextNode = 16;
     private const string CastBarAddon = "KTGEnemyCastBar";
     private const uint CastNameNode = 4;
-    private const int LetterlockTailMs = 1500;
+    private const float LetterlockFull = 0.95f;
+    private const int LetterlockHoldMs = 3500;
 
     private readonly Plugin plugin;
     private readonly Dictionary<string, DateTime> recentlySent = [];
@@ -65,6 +66,11 @@ public sealed class AutoPlayer : IDisposable
 
     // For the window: the phrase in progress, the keys that make it up, and how many are sent.
     public string? CurrentWord => typing;
+    public WordLog Words { get; } = new();
+    // The label being typed, for the word log.
+    private nint typingKey;
+    private bool typingHidden;
+    private int typingFixes;
     public string CurrentKeys => keys;
     public int TypedCount => typedCount;
 
@@ -91,17 +97,20 @@ public sealed class AutoPlayer : IDisposable
         var addons = cfg.GameAddons.Append(WordAddon).Distinct();
 
         var all = addons.SelectMany(UiScanner.AllTexts).ToList();
-        if (!all.Any(t => t.LabelVisible))
+        if (!all.Any(t => t.LabelVisible || t.Obscured))
         {
             ResetTyping();
             remembered.Clear();
+            Words.MatchOver();
             hiddenDumps = 0;
             boxClosed = true;
             Status = "Waiting for the minigame";
             return;
         }
 
-        LastTargets = FindTargets(Remember(all), cfg);
+        var known = Remember(all);
+        Words.Check(known.GroupBy(t => t.Key).ToDictionary(g => g.Key, g => g.First().Text.Trim()));
+        LastTargets = FindTargets(known, cfg);
 
         var now = DateTime.UtcNow;
         if (now < nextAction) return;
@@ -135,6 +144,7 @@ public sealed class AutoPlayer : IDisposable
             }
             if (typedCount > 0)
             {
+                Words.Dropped(typing, typingKey, typingHidden, typingFixes);
                 for (var i = 0; i < typedCount; i++) KeySender.Backspace();
                 ResetTyping();
                 Status = "Word gone, clearing what we typed";
@@ -153,6 +163,7 @@ public sealed class AutoPlayer : IDisposable
                 return;
             }
             typing = next.Text;
+            (typingKey, typingHidden, typingFixes) = (next.Key, !next.TextVisible, 0);
             keys = cfg.SkipOptionalPunctuation ? OptionalPunctuation.Replace(typing, "") : typing;
             typedCount = 0;
 
@@ -178,6 +189,7 @@ public sealed class AutoPlayer : IDisposable
         KeySender.Enter();
         boxClosed = true;
         recentlySent[typing] = now;
+        Words.Sent(typing, typingKey, typingHidden, typingFixes);
         Status = $"Sent \"{typing}\"";
         ResetTyping();
         Delay(cfg.WordDelayMs);
@@ -204,6 +216,7 @@ public sealed class AutoPlayer : IDisposable
         {
             // Leftover or wrong text: wipe it and start this word again. Never Esc, that quits on an empty box.
             for (var i = 0; i < input.Length; i++) KeySender.Backspace();
+            if (typing != null) typingFixes++;
             Status = "Clearing the input box";
         }
         else
@@ -226,7 +239,20 @@ public sealed class AutoPlayer : IDisposable
         var fromMemory = false;
         foreach (var t in all)
         {
-            if (!t.LabelVisible) continue;
+            if (!t.LabelVisible && !t.Obscured) continue;
+
+            // Obscured labels are hidden, but their text node still holds the live word (it even
+            // changes after each hit), so read it from there and only fall back to memory.
+            if (!t.LabelVisible)
+            {
+                if (!string.IsNullOrWhiteSpace(t.Text) && !Masked.IsMatch(t.Text)) remembered[t.Key] = t.Text;
+                if (remembered.TryGetValue(t.Key, out var hidden))
+                {
+                    result.Add(t with { Text = hidden, TextVisible = false });
+                    fromMemory = true;
+                }
+                continue;
+            }
 
             var shown = t.TextVisible && !Masked.IsMatch(t.Text);
             // "Partially obscured" may swap some letters for symbols; keep the clean word we saw first.
@@ -248,7 +274,7 @@ public sealed class AutoPlayer : IDisposable
         }
 
         // Labels that are gone for good take their memory with them.
-        var live = all.Where(t => t.LabelVisible).Select(t => t.Key).ToHashSet();
+        var live = all.Where(t => t.LabelVisible || t.Obscured).Select(t => t.Key).ToHashSet();
         foreach (var key in remembered.Keys.Where(k => !live.Contains(k)).ToList())
             remembered.Remove(key);
 
@@ -281,13 +307,24 @@ public sealed class AutoPlayer : IDisposable
     {
         var ignore = cfg.IgnoreWords;
         var ktgTexts = UiScanner.VisibleAddons().Where(n => n.StartsWith("KTG")).Distinct().SelectMany(UiScanner.Texts).ToList();
-        // No-entry sign: typing that enemy's word gets punished.
+        // No-typing sign (Cursed Gaze, Sensory Jammer): only keys pressed from the moment the bar is full
+        // until the gaze lands get punished, so keep typing while it fills and hold every key from 95 %
+        // for 3.5 s. A key 0.25 s after the bar vanished was still punished in XeldarAlz's match logs.
+        var now = DateTime.UtcNow;
+        var signBars = UiScanner.CastBars(CastBarAddon)
+            .Where(b => GameInput.IsLetterlock(b.Name) || cfg.DangerCasts.Any(d => b.Name.Contains(d, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
         var danger = CastsNamed(ktgTexts, cfg.DangerCasts)
             .Concat(ktgTexts.Where(t => t.Addon == CastBarAddon && t.NodeId == CastNameNode && GameInput.IsLetterlock(t.Text)))
             .ToList();
-        // The punishment window runs a little past the cast bar, until the gaze lands.
-        if (danger.Count > 0) dangerUntil = DateTime.UtcNow.AddMilliseconds(LetterlockTailMs);
-        noTypingSign = DateTime.UtcNow < dangerUntil;
+        // Name on screen but no fill could be read: hold the whole cast, as before, rather than guess.
+        if (signBars.Any(b => b.Progress >= LetterlockFull) || (danger.Count > 0 && signBars.Count == 0))
+        {
+            if (now >= dangerUntil)
+                Plugin.Log.Info($"[auto] Holding every key: {(signBars.Count > 0 ? signBars[0].Name : danger[0].Text)} is landing");
+            dangerUntil = now.AddMilliseconds(LetterlockHoldMs);
+        }
+        noTypingSign = now < dangerUntil;
         // Red / gold labels: interrupt these before anything else.
         var urgent = CastsNamed(ktgTexts, cfg.UrgentCasts);
         if ((danger.Count > 0 || urgent.Count > 0) && castDumps < 3 && cfg.AutoDump)

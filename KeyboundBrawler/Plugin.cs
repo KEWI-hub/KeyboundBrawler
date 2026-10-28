@@ -26,6 +26,8 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
     [PluginService] internal static ITargetManager TargetManager { get; private set; } = null!;
     [PluginService] internal static IClientState ClientState { get; private set; } = null!;
+    [PluginService] internal static IGameInteropProvider GameInterop { get; private set; } = null!;
+    [PluginService] internal static IAddonLifecycle AddonLifecycle { get; private set; } = null!;
 
     public Configuration Config { get; }
     public int SessionRuns { get; set; }
@@ -34,6 +36,8 @@ public sealed class Plugin : IDalamudPlugin
     public MatchWatcher MatchWatcher { get; }
     public VendorRunner Vendor { get; }
     public ShopBuyer Shop { get; }
+    public ShopRecorder Recorder { get; }
+    private readonly AfkGuard afkGuard;
 
     // "/kbb debug" shows the UI scanner, which normal players do not need.
     public bool ShowDebug { get; set; }
@@ -93,6 +97,8 @@ public sealed class Plugin : IDalamudPlugin
             Config.Version = 7;
             Config.Save();
         }
+        // Preset speeds follow the table in TypingSpeedInfo, so re-apply in case it changed.
+        if (Config.Speed != TypingSpeed.Custom) Config.ApplySpeed(Config.Speed);
         // Loading appends saved list items onto the defaults, so drop the repeats.
         Config.DangerCasts = Config.DangerCasts.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         Config.UrgentCasts = Config.UrgentCasts.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -101,6 +107,8 @@ public sealed class Plugin : IDalamudPlugin
         MatchWatcher = new MatchWatcher(this);
         Vendor = new VendorRunner(this);
         Shop = new ShopBuyer(this);
+        Recorder = new ShopRecorder();
+        afkGuard = new AfkGuard();
 
         mainWindow = new MainWindow(this);
         windowSystem.AddWindow(mainWindow);
@@ -118,6 +126,8 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        afkGuard.Dispose();
+        Recorder.Dispose();
         Shop.Dispose();
         Vendor.Dispose();
         MatchWatcher.Dispose();

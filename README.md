@@ -26,18 +26,22 @@ Tick **Start auto-play when a match begins** and it starts and stops by itself.
 ## What auto-play does
 
 - Reads enemy words from the `KTGEWord` addon and types them
-- Speed presets: Human 60, Programmer 90, Monkey 100, KEWI 270 WPM
+- Speed presets: Human 60, DEV 100, Monkey 120, KEWI 180 WPM
 - Opens the input box with Enter before each word (the box closes after every submit)
 - Never types while chat or another text box has focus
 - Priority by label colour: green barrier phrases, then red, then gold casters, then the closest enemy
-- Holds every key during Cursed Gaze / Dynamic Sensory Jammer (the crossed-out keyboard sign)
-- Remembers boss words before they get obscured
+- Cursed Gaze / Dynamic Sensory Jammer (the crossed-out keyboard sign): keeps typing while the cast bar fills, then holds every key while it lands
+- Finishes words the boss hides with its noise overlay, and remembers words before they get obscured
 - Optional: skip the punctuation the game does not require ( ? ! - ' )
-- Resets the duty's inactivity timer on every key it sends, so you are not expelled for "extended inactivity"
+- Keeps the duty's inactivity timers, and the minigame's own idle timer, at zero while it types, so you are not expelled for "extended inactivity"
+- **Word log**: every word it sent this session, with hit, missed or dropped, and how many typos it had to fix
 
-## Tracker
+## Tracker and rewards
 
-Counts runs and MGC from chat, and shows how many runs you still need for the rewards you tick.
+- Counts runs and MGC from chat, and shows how many runs you still need for the rewards you tick
+- Syncs your real MGC and the rewards you already hold whenever the MGC Trader shop is open
+- **Walk to vendor** uses [vnavmesh](https://github.com/awgil/ffxiv_navmesh) to walk to the MGC Trader «Prize Claim» and open the shop
+- **Buy wanted rewards when the shop opens** buys the ticked rewards, cheapest first, while you have the MGC
 
 ## Build
 
@@ -47,7 +51,12 @@ dotnet build -c Release
 
 Needs the .NET 10 SDK and XIVLauncher with Dalamud installed. Output: `KeyboundBrawler/bin/x64/Release/KeyboundBrawler/latest.zip`.
 
-## Support
+## Release
 
-This plugin is free. If it saved you some typing, you can buy me a coffee at
-**[ko-fi.com/kewiv](https://ko-fi.com/kewiv)**. Entirely optional.
+1. Test as a local dev plugin first (`/xlsettings` → Experimental → Dev Plugin Locations → the build output folder).
+2. Only after it works in game: `tools/release.sh <version> testing|stable "notes"`.
+   It bumps the csproj and `repo.json`, builds, commits, pushes and uploads the zip.
+3. Check that `https://raw.githubusercontent.com/KEWI-hub/KeyboundBrawler/main/repo.json` shows the new version (raw cache is about 5 minutes).
+
+- Stable zip: `releases/latest/download/latest.zip`. Testing zip: the `testing` prerelease.
+- Native calls (hooks, addon callbacks) always go through a dev or testing build first: a wrong `ReceiveEvent` once crashed the game (0.6.1).

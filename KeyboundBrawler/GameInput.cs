@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace KeyboundBrawler;
@@ -52,16 +53,21 @@ public static unsafe class GameInput
         return false;
     }
 
-    // The duty's inactivity check only counts hardware input, so every key we post resets the idle
-    // timers the way a real key press would. While nothing is sent they run as usual.
+    // Every key we post keeps the duty's idle timers from running out (see AfkGuard). Every 15 s,
+    // log where they stand so a kick can be traced.
     public static void MarkActive()
     {
-        var timers = UIModule.Instance()->GetInputTimerModule();
-        if (timers == null) return;
-        timers->AfkTimer = 0;
-        timers->ContentInputTimer = 0;
-        timers->InputTimer = 0;
+        // Read before this key's reset, so the brawler counter shows how far it climbed since the last one.
+        var brawler = AfkGuard.BrawlerIdle();
+        AfkGuard.KeySent();
+        if (DateTime.UtcNow <= nextTimerLog) return;
+        nextTimerLog = DateTime.UtcNow.AddSeconds(15);
+        var timers = InputTimerModule.Instance();
+        if (timers != null)
+            Plugin.Log.Info($"[afk] hooked={AfkGuard.Hooked} brawler={brawler?.ToString("0.00") ?? "?"} afk={timers->AfkTimer:0.0} content={timers->ContentInputTimer:0.0} input={timers->InputTimer:0.0} limit={timers->InstanceContentAfkTimeLimit:0}");
     }
+
+    private static DateTime nextTimerLog = DateTime.MinValue;
 
     public static bool IsLetterlock(string castName)
     {

@@ -8,15 +8,18 @@ namespace KeyboundBrawler;
 
 // Buys the wanted rewards in the MGC Trader's "Currency Exchange" (ShopExchangeCurrency) window.
 // Layout from a dump of that window: value 1 = open tab, 4 = rows in the tab, 86 = MGC held,
-// 90+ = row names, 456+ = row prices. Every step is checked against those values; anything
+// 90+ = row names, 456+ = row prices, 578+ = Qty column (how many you hold, as text),
+// 1310+ = the shop's own index for each row. Grey rows only mean "not enough MGC".
+// Callbacks recorded from a purchase made by hand: tab = [4, -1, 1, (uint)tab], pick item =
+// [0, shopIndex, 1], then SelectYesno [0] for "Yes". Every step is checked against those values; anything
 // unexpected stops the run and saves a dump instead of guessing on.
 public sealed unsafe class ShopBuyer : IDisposable
 {
     private const string ShopAddon = "ShopExchangeCurrency";
-    private const int TabValue = 1, RowCountValue = 4, MgcValue = 86, FirstNameValue = 90;
+    private const int TabValue = 1, RowCountValue = 4, MgcValue = 86, FirstNameValue = 90, FirstQtyValue = 578, FirstShopIndexValue = 1310;
+    // Can be bought again and again, so holding one never means "done".
+    private const string Repeatable = "Keybound Coffer";
     private static readonly string[] ConfirmAddons = ["SelectYesno", "ShopExchangeCurrencyDialog"];
-
-    private static readonly string[] TabNames = ["Weapons", "Armor", "Accessories", "Others"];
 
     private enum Step { Idle, SwitchTab, Buy, Confirm, Verify }
 
@@ -56,6 +59,15 @@ public sealed unsafe class ShopBuyer : IDisposable
 
     private void OnUpdate(IFramework framework)
     {
+        // Whenever the shop is open it shows the real MGC total; keep the tracker in step with it.
+        var open = Shop();
+        if (open != null && UInt(open, MgcValue) is var held && held > 0 && held != plugin.Config.CurrentMgc)
+        {
+            plugin.Config.CurrentMgc = (int)held;
+            plugin.Config.Save();
+        }
+        if (open != null) MarkHeldAsOwned(open);
+
         if (step == Step.Idle) return;
         var shop = Shop();
         if (shop == null) { Finish("The shop closed."); return; }
@@ -66,16 +78,10 @@ public sealed unsafe class ShopBuyer : IDisposable
         {
             case Step.SwitchTab:
                 if (UInt(shop, TabValue) == current!.Tab) { SetStep(Step.Buy); break; }
-                if (!plugin.Config.ClickShopTabs)
-                {
-                    // Safe mode: wait for the player to click the tab themselves.
-                    Status = $"Click the \"{TabNames[current.Tab]}\" tab to buy {current.Name}";
-                    break;
-                }
                 if (elapsed > 3000) { Fail("Could not switch to the right tab."); break; }
                 if (!tabRequested)
                 {
-                    if (!ClickTab(shop, current.Tab)) { Fail("Could not find the shop's tab buttons."); break; }
+                    FireTab(shop, current.Tab);
                     tabRequested = true;
                 }
                 break;
@@ -85,7 +91,7 @@ public sealed unsafe class ShopBuyer : IDisposable
                 if (row < 0) { Skip($"{current.Name} is not in the shop (already owned?)."); break; }
                 mgcBefore = UInt(shop, MgcValue);
                 if (mgcBefore < current.Cost) { Finish($"Not enough MGC for {current.Name} ({mgcBefore}/{current.Cost})."); break; }
-                Fire(shop, 0, row, 1);
+                Fire(shop, 0, (int)UInt(shop, FirstShopIndexValue + row), 1);
                 SetStep(Step.Confirm);
                 break;
 
@@ -108,7 +114,7 @@ public sealed unsafe class ShopBuyer : IDisposable
                 if (mgcNow < mgcBefore)
                 {
                     var cfg = plugin.Config;
-                    cfg.Owned.Add(current!.Name);
+                    if (current!.Name != Repeatable) cfg.Owned.Add(current.Name);
                     cfg.CurrentMgc = (int)mgcNow;
                     cfg.Save();
                     Plugin.Log.Info($"[shop] Bought {current.Name} for {mgcBefore - mgcNow} MGC");
@@ -157,43 +163,27 @@ public sealed unsafe class ShopBuyer : IDisposable
         stepStarted = DateTime.UtcNow;
     }
 
-    // The four tabs are radio-button components on one row; click the n-th from the left the way a
-    // mouse click would, by sending its own click event to the window.
-    private static bool ClickTab(AtkUnitBase* shop, int tab)
+    // Rewards bought earlier (by hand or before this plugin) show Qty 1+ in the open tab; tick them as got.
+    private void MarkHeldAsOwned(AtkUnitBase* shop)
     {
-        var rows = new Dictionary<int, List<nint>>();
-        var uld = &shop->UldManager;
-        for (var i = 0; i < uld->NodeListCount; i++)
+        var cfg = plugin.Config;
+        var rows = (int)UInt(shop, RowCountValue);
+        var changed = false;
+        foreach (var reward in Rewards.All)
         {
-            var node = uld->NodeList[i];
-            if (node == null || (ushort)node->Type < 1000 || !node->IsVisible()) continue;
-            var component = ((AtkComponentNode*)node)->Component;
-            if (component == null || !HasText(&component->UldManager)) continue;
-            var y = (int)MathF.Round(node->ScreenY);
-            if (!rows.TryGetValue(y, out var list)) rows[y] = list = [];
-            list.Add((nint)node);
+            if (reward.Name == Repeatable || cfg.Owned.Contains(reward.Name)) continue;
+            var row = FindRow(shop, reward.Name);
+            if (row < 0 || row >= rows || FirstQtyValue + row >= shop->AtkValuesCount) continue;
+            var qty = shop->AtkValues[FirstQtyValue + row];
+            if (qty.Type is AtkValueType.String or AtkValueType.ManagedString or AtkValueType.ConstString &&
+                int.TryParse(qty.String.ToString(), out var held) && held > 0)
+            {
+                cfg.Owned.Add(reward.Name);
+                changed = true;
+                Plugin.Log.Info($"[shop] {reward.Name} already held, marked as got");
+            }
         }
-
-        var tabs = rows.Values.FirstOrDefault(l => l.Count == 4);
-        if (tabs == null || tab >= tabs.Count) return false;
-        var target = (AtkResNode*)tabs.OrderBy(n => ((AtkResNode*)n)->ScreenX).ElementAt(tab);
-        // A node keeps a chain of events (hover, click, ...); use its click one.
-        var evt = target->AtkEventManager.Event;
-        for (var e = evt; e != null; e = e->NextEvent)
-            if (e->State.EventType == AtkEventType.ButtonClick) { evt = e; break; }
-        if (evt == null) return false;
-        // The handler reads the event data, so it must point at real (zeroed) memory; null crashes the game.
-        var data = default(AtkEventData);
-        shop->ReceiveEvent((AtkEventType)evt->State.EventType, (int)evt->Param, evt, &data);
-        Plugin.Log.Info($"[shop] clicked tab {tab} (event {evt->State.EventType}, param {evt->Param})");
-        return true;
-    }
-
-    private static bool HasText(AtkUldManager* uld)
-    {
-        for (var i = 0; i < uld->NodeListCount; i++)
-            if (uld->NodeList[i] != null && uld->NodeList[i]->Type == NodeType.Text) return true;
-        return false;
+        if (changed) cfg.Save();
     }
 
     private static int FindRow(AtkUnitBase* shop, string name)
@@ -227,6 +217,18 @@ public sealed unsafe class ShopBuyer : IDisposable
         }
         unit->FireCallback((uint)args.Length, values);
         Plugin.Log.Info($"[shop] {unit->NameString} callback {string.Join(", ", args)}");
+    }
+
+    // Same values the game sends when the tab is clicked by hand.
+    private static void FireTab(AtkUnitBase* shop, int tab)
+    {
+        var values = stackalloc AtkValue[4];
+        values[0].Type = AtkValueType.Int; values[0].Int = 4;
+        values[1].Type = AtkValueType.Int; values[1].Int = -1;
+        values[2].Type = AtkValueType.Int; values[2].Int = 1;
+        values[3].Type = AtkValueType.UInt; values[3].UInt = (uint)tab;
+        shop->FireCallback(4, values);
+        Plugin.Log.Info($"[shop] {shop->NameString} tab callback 4, -1, 1, {tab}");
     }
 
     private static AtkUnitBase* Shop() => Addon(ShopAddon);

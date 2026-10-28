@@ -1,0 +1,7 @@
+- No more "expelled from the duty due to extended inactivity": the minigame's own idle timer is reset while the plugin types
+- Cursed Gaze / Dynamic Sensory Jammer: keeps typing while the cast bar fills, holds every key only while it lands
+- Words the boss hides (Cryptic Communications) are read and finished instead of dropped
+- New Word log: every word sent, hit / missed / dropped, typos fixed
+- Auto-buy at the MGC Trader uses the shop's real buttons; MGC and rewards you already hold sync when the shop is open
+- Speed presets: Human 60, DEV 100, Monkey 120, KEWI 180 WPM
+- Refreshed KEWI cream window

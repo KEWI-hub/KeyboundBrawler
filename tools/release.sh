@@ -30,7 +30,9 @@ unzip -p "$zip" KeyboundBrawler.json | grep -q "\"AssemblyVersion\": \"${version
 git add -A
 git commit -q -m "${channel} ${version}
 
-${notes}"
+${notes}
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push -q
 
 if [ "$channel" = "stable" ]; then

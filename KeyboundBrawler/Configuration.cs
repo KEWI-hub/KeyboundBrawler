@@ -67,29 +67,28 @@ public class Configuration : IPluginConfiguration
     public ushort VendorTerritory { get; set; }
     // Buy the wanted rewards as soon as the walk opens the shop.
     public bool AutoBuy { get; set; }
-    // Clicking the shop's tab buttons for the player crashed the game once (0.6.1); off until proven safe.
-    public bool ClickShopTabs { get; set; }
+    public bool HideOwnedRewards { get; set; }
 
     public void Save() => Plugin.PluginInterface.SavePluginConfig(this);
 }
 
-public enum TypingSpeed { Human, Programmer, Monkey, Kewi, Custom }
+public enum TypingSpeed { Human, Dev, Monkey, Kewi, Custom }
 
 public static class TypingSpeedInfo
 {
     public static int Wpm(this TypingSpeed speed) => speed switch
     {
         TypingSpeed.Human => 60,
-        TypingSpeed.Programmer => 90,
-        TypingSpeed.Monkey => 100,
-        TypingSpeed.Kewi => 270,
+        TypingSpeed.Dev => 100,
+        TypingSpeed.Monkey => 120,
+        TypingSpeed.Kewi => 180,
         _ => 0,
     };
 
     public static string Label(this TypingSpeed speed) => speed switch
     {
         TypingSpeed.Human => "Human",
-        TypingSpeed.Programmer => "Programmer",
+        TypingSpeed.Dev => "DEV",
         TypingSpeed.Monkey => "Monkey",
         TypingSpeed.Kewi => "KEWI",
         _ => "Custom",
