@@ -65,7 +65,11 @@ public sealed unsafe class ShopBuyer : IDisposable
             case Step.SwitchTab:
                 if (UInt(shop, TabValue) == current!.Tab) { SetStep(Step.Buy); break; }
                 if (elapsed > 3000) { Fail("Could not switch to the right tab."); break; }
-                if (!tabRequested) { Fire(shop, 1, current.Tab); tabRequested = true; }
+                if (!tabRequested)
+                {
+                    if (!ClickTab(shop, current.Tab)) { Fail("Could not find the shop's tab buttons."); break; }
+                    tabRequested = true;
+                }
                 break;
 
             case Step.Buy:
@@ -143,6 +147,43 @@ public sealed unsafe class ShopBuyer : IDisposable
     {
         step = next;
         stepStarted = DateTime.UtcNow;
+    }
+
+    // The four tabs are radio-button components on one row; click the n-th from the left the way a
+    // mouse click would, by sending its own click event to the window.
+    private static bool ClickTab(AtkUnitBase* shop, int tab)
+    {
+        var rows = new Dictionary<int, List<nint>>();
+        var uld = &shop->UldManager;
+        for (var i = 0; i < uld->NodeListCount; i++)
+        {
+            var node = uld->NodeList[i];
+            if (node == null || (ushort)node->Type < 1000 || !node->IsVisible()) continue;
+            var component = ((AtkComponentNode*)node)->Component;
+            if (component == null || !HasText(&component->UldManager)) continue;
+            var y = (int)MathF.Round(node->ScreenY);
+            if (!rows.TryGetValue(y, out var list)) rows[y] = list = [];
+            list.Add((nint)node);
+        }
+
+        var tabs = rows.Values.FirstOrDefault(l => l.Count == 4);
+        if (tabs == null || tab >= tabs.Count) return false;
+        var target = (AtkResNode*)tabs.OrderBy(n => ((AtkResNode*)n)->ScreenX).ElementAt(tab);
+        // A node keeps a chain of events (hover, click, ...); use its click one.
+        var evt = target->AtkEventManager.Event;
+        for (var e = evt; e != null; e = e->NextEvent)
+            if (e->State.EventType == AtkEventType.ButtonClick) { evt = e; break; }
+        if (evt == null) return false;
+        shop->ReceiveEvent((AtkEventType)evt->State.EventType, (int)evt->Param, evt);
+        Plugin.Log.Info($"[shop] clicked tab {tab} (event {evt->State.EventType}, param {evt->Param})");
+        return true;
+    }
+
+    private static bool HasText(AtkUldManager* uld)
+    {
+        for (var i = 0; i < uld->NodeListCount; i++)
+            if (uld->NodeList[i] != null && uld->NodeList[i]->Type == NodeType.Text) return true;
+        return false;
     }
 
     private static int FindRow(AtkUnitBase* shop, string name)
