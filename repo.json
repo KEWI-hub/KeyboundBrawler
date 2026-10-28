@@ -1,0 +1,23 @@
+[
+  {
+    "Author": "KEWI",
+    "Name": "Keybound Brawler Helper",
+    "InternalName": "KeyboundBrawler",
+    "AssemblyVersion": "0.2.0.0",
+    "Punchline": "Auto-play and MGC tracker for the Keybound Brawler Gold Saucer event.",
+    "Description": "Reads the enemy words in Keybound Brawler and types them for you at a human pace, opens the input box, pauses on no-typing casts and remembers obscured boss words. Also tracks MGC and plans event rewards. /kbb opens the window, /kbb auto toggles auto-play.\n\nAuto-play is against the FFXIV Terms of Service. Use at your own risk.",
+    "ApplicableVersion": "any",
+    "RepoUrl": "https://github.com/KEWI-hub/KeyboundBrawler",
+    "IconUrl": "https://raw.githubusercontent.com/KEWI-hub/KeyboundBrawler/main/images/icon.png",
+    "Tags": [ "gold saucer", "event", "mgc", "minigame", "typing" ],
+    "DalamudApiLevel": 15,
+    "LoadPriority": 0,
+    "IsHide": false,
+    "IsTestingExclusive": false,
+    "DownloadCount": 0,
+    "LastUpdate": 1793201718,
+    "DownloadLinkInstall": "https://github.com/KEWI-hub/KeyboundBrawler/releases/latest/download/latest.zip",
+    "DownloadLinkUpdate": "https://github.com/KEWI-hub/KeyboundBrawler/releases/latest/download/latest.zip",
+    "DownloadLinkTesting": "https://github.com/KEWI-hub/KeyboundBrawler/releases/latest/download/latest.zip"
+  }
+]
