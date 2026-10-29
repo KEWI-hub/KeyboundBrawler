@@ -94,7 +94,8 @@ public sealed class MainWindow : Window
             DrawRounds(cfg);
         if (ImGui.CollapsingHeader("Rewards"))
         {
-            DrawVendor(cfg);
+            // Buying is off for players until it is fixed; /kbb debug still shows it.
+            if (plugin.ShowDebug) DrawVendor(cfg);
             DrawRewards(cfg);
         }
         if (ImGui.CollapsingHeader("Word log"))

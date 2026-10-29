@@ -110,7 +110,7 @@ public sealed class VendorRunner : IDisposable
                     System.IO.File.AppendAllLines(path, opened.SelectMany(UiScanner.AtkValues));
                     Plugin.Log.Info($"Shop opened: {string.Join(", ", opened)} (dump {path})");
                     SetStep(Step.Idle, "Shop open.");
-                    if (plugin.Config.AutoBuy) plugin.Shop.Start();
+                    if (plugin.Config.AutoBuy && plugin.ShowDebug) plugin.Shop.Start();
                 }
                 else if (elapsed > ShopTimeout)
                 {

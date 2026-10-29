@@ -1,0 +1,1 @@
+- Hotfix: walking to the vendor and buying rewards is turned off for now because of a bug. The reward list and the MGC tracker still work.

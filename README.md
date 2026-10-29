@@ -43,14 +43,13 @@ Plays a set number of rounds back to back: walks to the Keybound Registrar with
 result screen, and goes again.
 
 Be in the Gold Saucer event area, set the number of rounds, and press **Play N rounds**. Nothing to set up:
-the Registrar and the MGC Trader are built in.
+the Registrar is built in.
 
 ## Tracker and rewards
 
 - Counts runs and MGC from chat, and shows how many runs you still need for the rewards you tick
 - Syncs your real MGC and the rewards you already hold whenever the MGC Trader shop is open
-- **Walk to vendor** uses [vnavmesh](https://github.com/awgil/ffxiv_navmesh) to walk to the MGC Trader «Prize Claim» and open the shop
-- **Buy wanted rewards when the shop opens** buys the ticked rewards, cheapest first, while you have the MGC
+- Walking to the vendor and buying rewards is turned off for now while a bug is fixed
 
 ## Build
 
