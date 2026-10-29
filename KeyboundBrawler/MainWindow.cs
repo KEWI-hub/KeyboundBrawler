@@ -107,11 +107,15 @@ public sealed class MainWindow : Window
 
     private void DrawHeader()
     {
-        var iconPath = Path.Combine(Plugin.PluginInterface.AssemblyLocation.DirectoryName ?? "", "icon.png");
-        if (File.Exists(iconPath))
+        // The bird behind its desk taps a wing for every key auto-play sends, and rests otherwise.
+        var auto0 = plugin.AutoPlayer;
+        var frame = auto0.Enabled && auto0.CurrentWord != null && auto0.TypedCount > 0
+            ? (auto0.TypedCount % 2 == 1 ? "left" : "right") : "idle";
+        var birdPath = Path.Combine(Plugin.PluginInterface.AssemblyLocation.DirectoryName ?? "", $"bird_{frame}.png");
+        if (File.Exists(birdPath))
         {
-            var icon = Plugin.TextureProvider.GetFromFile(iconPath).GetWrapOrEmpty();
-            ImGui.Image(icon.Handle, new Vector2(52, 52));
+            var bird = Plugin.TextureProvider.GetFromFile(birdPath).GetWrapOrEmpty();
+            ImGui.Image(bird.Handle, new Vector2(100, 97));
             ImGui.SameLine();
         }
 
