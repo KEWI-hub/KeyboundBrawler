@@ -1,0 +1,1 @@
+- Play rounds: no longer stops before round 2 when the Registrar ignores the first talk after a match. It talks again (up to 3 times) until the entry window opens.

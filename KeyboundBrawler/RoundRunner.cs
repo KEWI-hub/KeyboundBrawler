@@ -36,11 +36,15 @@ public sealed unsafe class RoundRunner : IDisposable
     private static readonly TimeSpan MatchEndGrace = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan BackTimeout = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan RestBetweenRounds = TimeSpan.FromSeconds(3);
+    // Right after coming back from a match the Registrar can ignore the first talk; ask again this often.
+    private static readonly TimeSpan TalkRetry = TimeSpan.FromSeconds(5);
+    private const int TalkTries = 3;
 
     private readonly Plugin plugin;
     private Step step;
     private DateTime stepStarted;
     private int clickIndex;
+    private int talks;
 
     public string Status { get; private set; } = "";
     public bool Busy => step != Step.Idle;
@@ -75,6 +79,7 @@ public sealed unsafe class RoundRunner : IDisposable
 
     private void GoToNpc()
     {
+        talks = 0;
         if (DistanceToNpc() <= TalkRange) { SetStep(Step.Talking, "Talking to the entry NPC"); return; }
         if (plugin.Nav.CannotWalk() is { } why) { Fail(why); return; }
         if (!plugin.Nav.MoveTo(EntryNpcPosition)) { Fail("vnavmesh could not path to the entry NPC."); return; }
@@ -106,12 +111,19 @@ public sealed unsafe class RoundRunner : IDisposable
             case Step.Talking:
                 if (!CanAct) break;
                 if (!Interact()) { Fail("Could not find the entry NPC nearby."); return; }
+                talks++;
                 clickIndex = 0;
                 SetStep(Step.Entering, "Opening the entry window");
                 break;
 
             case Step.Entering:
                 if (inMatch) { SetStep(Step.Playing, $"Round {RoundsDone + 1} of {RoundsWanted}: playing"); break; }
+                if (clickIndex == 0 && Addon(EntryClicks[0].Addon) == null && elapsed > TalkRetry && talks < TalkTries)
+                {
+                    Plugin.Log.Info($"[rounds] Entry window not up yet, talking again ({string.Join(", ", UiScanner.VisibleAddons())})");
+                    SetStep(Step.Talking, "Talking to the entry NPC");
+                    break;
+                }
                 if (Replay(EntryClicks, elapsed))
                     SetStep(Step.WaitMatch, "Waiting for the match to start");
                 break;
@@ -212,6 +224,7 @@ public sealed unsafe class RoundRunner : IDisposable
 
     private void Fail(string why)
     {
+        Plugin.Log.Info($"[rounds] Open windows: {string.Join(", ", UiScanner.VisibleAddons())}");
         plugin.Nav.Stop();
         SetStep(Step.Idle, $"Stopped: {why}");
     }
