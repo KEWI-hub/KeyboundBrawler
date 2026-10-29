@@ -1,0 +1,2 @@
+- Buying rewards is back. Rewards made for the other gender used to get stuck on the confirm window; it now ticks "Proceed" and answers both confirm windows.
+- The Keybound Coffer row has an amount box: one buy takes that many Coffers (fewer if you are short on MGC), and its price shows the total.

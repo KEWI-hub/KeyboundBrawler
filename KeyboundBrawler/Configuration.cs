@@ -65,6 +65,8 @@ public class Configuration : IPluginConfiguration
 
     // Buy the wanted rewards as soon as the walk opens the shop.
     public bool AutoBuy { get; set; }
+    // How many Keybound Coffers one buy takes (fewer when the MGC runs short).
+    public int CofferCount { get; set; } = 1;
     public bool HideOwnedRewards { get; set; }
 
     public void Save() => Plugin.PluginInterface.SavePluginConfig(this);

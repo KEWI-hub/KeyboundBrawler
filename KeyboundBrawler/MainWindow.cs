@@ -94,8 +94,7 @@ public sealed class MainWindow : Window
             DrawRounds(cfg);
         if (ImGui.CollapsingHeader("Rewards"))
         {
-            // Buying is off for players until it is fixed; /kbb debug still shows it.
-            if (plugin.ShowDebug) DrawVendor(cfg);
+            DrawVendor(cfg);
             DrawRewards(cfg);
         }
         if (ImGui.CollapsingHeader("Word log"))
@@ -246,15 +245,16 @@ public sealed class MainWindow : Window
 
         var next = goal[0];
         var avg = AveragePerRun(cfg);
-        var amount = $"{cfg.CurrentMgc} / {next.Cost}";
+        var price = Rewards.Price(next, cfg);
+        var amount = $"{cfg.CurrentMgc} / {price}";
         ImGui.TextUnformatted($"Next: {next.Name}");
         ImGui.SameLine(ImGui.GetWindowContentRegionMax().X - ImGui.CalcTextSize(amount).X);
         ImGui.TextUnformatted(amount);
-        ImGui.ProgressBar(Math.Min(1f, cfg.CurrentMgc / (float)next.Cost), new Vector2(-1, 10), "");
+        ImGui.ProgressBar(Math.Min(1f, cfg.CurrentMgc / (float)price), new Vector2(-1, 10), "");
 
-        var shortfall = next.Cost - cfg.CurrentMgc;
+        var shortfall = price - cfg.CurrentMgc;
         var nextLine = shortfall <= 0 ? "You can buy it now." : avg > 0 ? $"{shortfall} MGC to go, about {Math.Ceiling(shortfall / avg)} runs." : $"{shortfall} MGC to go.";
-        ImGui.TextDisabled($"{nextLine} Wish list: {goal.Count} rewards, {goal.Sum(r => r.Cost)} MGC.");
+        ImGui.TextDisabled($"{nextLine} Wish list: {goal.Count} rewards, {goal.Sum(r => Rewards.Price(r, cfg))} MGC.");
     }
 
     // Round loop: walks to the Keybound Registrar, plays, leaves, and goes again.
@@ -389,8 +389,9 @@ public sealed class MainWindow : Window
                 Toggle(cfg, cfg.Wanted, reward.Name, wanted);
 
             ImGui.TableNextColumn();
-            var owned = cfg.Owned.Contains(reward.Name);
-            if (ImGui.Checkbox("##owned", ref owned))
+            var coffer = reward.Name == Rewards.Coffer;
+            var owned = !coffer && cfg.Owned.Contains(reward.Name);
+            if (!coffer && ImGui.Checkbox("##owned", ref owned))
             {
                 Toggle(cfg, cfg.Owned, reward.Name, owned);
                 // Ticking "got" after buying spends the MGC; unticking refunds it.
@@ -404,10 +405,19 @@ public sealed class MainWindow : Window
             ImGui.TableNextColumn();
             if (owned) ImGui.TextDisabled(reward.Name);
             else ImGui.TextUnformatted(reward.Name);
+            if (coffer)
+            {
+                // Amount box with - + like the shop row's own, right after the name.
+                ImGui.SameLine(0, 12);
+                ImGui.SetNextItemWidth(96);
+                var count = cfg.CofferCount;
+                if (ImGui.InputInt("##coffers", ref count)) { cfg.CofferCount = Math.Clamp(count, 1, 99); cfg.Save(); }
+            }
             ImGui.TableNextColumn();
-            // Orange price: wanted and affordable right now.
-            if (!owned && wanted && reward.Cost <= cfg.CurrentMgc) ImGui.TextColored(Orange, reward.Cost.ToString());
-            else ImGui.TextDisabled(reward.Cost.ToString());
+            // Orange price: wanted and affordable right now. The Coffer shows the total for its amount.
+            var price = Rewards.Price(reward, cfg);
+            if (!owned && wanted && price <= cfg.CurrentMgc) ImGui.TextColored(Orange, price.ToString());
+            else ImGui.TextDisabled(price.ToString());
 
             ImGui.PopID();
         }

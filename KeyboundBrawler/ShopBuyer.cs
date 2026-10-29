@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace KeyboundBrawler;
@@ -11,14 +12,14 @@ namespace KeyboundBrawler;
 // 90+ = row names, 456+ = row prices, 578+ = Qty column (how many you hold, as text),
 // 1310+ = the shop's own index for each row. Grey rows only mean "not enough MGC".
 // Callbacks recorded from a purchase made by hand: tab = [4, -1, 1, (uint)tab], pick item =
-// [0, shopIndex, 1], then SelectYesno [0] for "Yes". Every step is checked against those values; anything
+// [0, shopIndex, amount], then SelectYesno [0] for "Yes" (twice for other-gender items, the first after ticking Proceed). Every step is checked against those values; anything
 // unexpected stops the run and saves a dump instead of guessing on.
 public sealed unsafe class ShopBuyer : IDisposable
 {
     private const string ShopAddon = "ShopExchangeCurrency";
     private const int TabValue = 1, RowCountValue = 4, MgcValue = 86, FirstNameValue = 90, FirstQtyValue = 578, FirstShopIndexValue = 1310;
     // Can be bought again and again, so holding one never means "done".
-    private const string Repeatable = "Keybound Coffer";
+    private const string Repeatable = Rewards.Coffer;
     private static readonly string[] ConfirmAddons = ["SelectYesno", "ShopExchangeCurrencyDialog"];
 
     private enum Step { Idle, SwitchTab, Buy, Confirm, Verify }
@@ -30,6 +31,7 @@ public sealed unsafe class ShopBuyer : IDisposable
     private Reward? current;
     private uint mgcBefore;
     private bool tabRequested;
+    private int confirms;
 
     public string Status { get; private set; } = "";
     public bool Busy => step != Step.Idle;
@@ -91,24 +93,16 @@ public sealed unsafe class ShopBuyer : IDisposable
                 if (row < 0) { Skip($"{current.Name} is not in the shop (already owned?)."); break; }
                 mgcBefore = UInt(shop, MgcValue);
                 if (mgcBefore < current.Cost) { Finish($"Not enough MGC for {current.Name} ({mgcBefore}/{current.Cost})."); break; }
-                Fire(shop, 0, (int)UInt(shop, FirstShopIndexValue + row), 1);
+                // The amount is the last value, same as typing it into the row's box by hand.
+                var amount = current.Name == Repeatable ? Math.Clamp(plugin.Config.CofferCount, 1, (int)(mgcBefore / current.Cost)) : 1;
+                Fire(shop, false, 0, (int)UInt(shop, FirstShopIndexValue + row), amount);
+                confirms = 0;
                 SetStep(Step.Confirm);
                 break;
 
+            // Most items ask once. Items for the other gender ask twice: first "you can never equip this" with a
+            // Proceed tick that has to be on before OK works, then the usual "exchange?". Both answer [0].
             case Step.Confirm:
-                foreach (var name in ConfirmAddons)
-                {
-                    var dialog = Addon(name);
-                    if (dialog == null) continue;
-                    UiScanner.DumpToFile("buy_confirm");
-                    Fire(dialog, 0);
-                    SetStep(Step.Verify);
-                    return;
-                }
-                if (UInt(shop, MgcValue) < mgcBefore) { SetStep(Step.Verify); break; }
-                if (elapsed > 3000) Fail("No confirmation showed up after picking the item.");
-                break;
-
             case Step.Verify:
                 var mgcNow = UInt(shop, MgcValue);
                 if (mgcNow < mgcBefore)
@@ -119,11 +113,23 @@ public sealed unsafe class ShopBuyer : IDisposable
                     cfg.Save();
                     Plugin.Log.Info($"[shop] Bought {current.Name} for {mgcBefore - mgcNow} MGC");
                     Next();
+                    break;
                 }
-                else if (elapsed > 4000)
+                var dialog = ConfirmDialog(out var dialogName);
+                if (dialog != null)
                 {
-                    Fail($"MGC did not go down after buying {current!.Name}.");
+                    if (confirms >= 2) { Fail($"More confirmations than expected for {current!.Name}."); break; }
+                    UiScanner.DumpToFile("buy_confirm");
+                    // Stackable items (the Coffer) ask for an amount first; its callbacks are not recorded yet.
+                    if (dialogName != "SelectYesno") { Fail($"{current!.Name} asks for an amount. Buy it by hand for now."); break; }
+                    if (dialogName == "SelectYesno" && TickProceed((AddonSelectYesno*)dialog)) { SetStep(step); break; }
+                    Fire(dialog, true, 0);
+                    confirms++;
+                    SetStep(Step.Verify);
+                    break;
                 }
+                if (step == Step.Confirm && elapsed > 3000) Fail("No confirmation showed up after picking the item.");
+                else if (step == Step.Verify && elapsed > 4000) Fail($"MGC did not go down after buying {current!.Name}.");
                 break;
         }
     }
@@ -207,7 +213,7 @@ public sealed unsafe class ShopBuyer : IDisposable
         return v.Type == AtkValueType.Int ? (uint)v.Int : v.UInt;
     }
 
-    private static void Fire(AtkUnitBase* unit, params int[] args)
+    private static void Fire(AtkUnitBase* unit, bool close, params int[] args)
     {
         var values = stackalloc AtkValue[args.Length];
         for (var i = 0; i < args.Length; i++)
@@ -215,8 +221,8 @@ public sealed unsafe class ShopBuyer : IDisposable
             values[i].Type = AtkValueType.Int;
             values[i].Int = args[i];
         }
-        unit->FireCallback((uint)args.Length, values);
-        Plugin.Log.Info($"[shop] {unit->NameString} callback {string.Join(", ", args)}");
+        unit->FireCallback((uint)args.Length, values, close);
+        Plugin.Log.Info($"[shop] {unit->NameString} callback {string.Join(", ", args)}{(close ? " close" : "")}");
     }
 
     // Same values the game sends when the tab is clicked by hand.
@@ -229,6 +235,30 @@ public sealed unsafe class ShopBuyer : IDisposable
         values[3].Type = AtkValueType.UInt; values[3].UInt = (uint)tab;
         shop->FireCallback(4, values);
         Plugin.Log.Info($"[shop] {shop->NameString} tab callback 4, -1, 1, {tab}");
+    }
+
+    private static AtkUnitBase* ConfirmDialog(out string name)
+    {
+        foreach (var n in ConfirmAddons)
+        {
+            var unit = Addon(n);
+            if (unit != null && unit->IsReady) { name = n; return unit; }
+        }
+        name = "";
+        return null;
+    }
+
+    // Ticking Proceed by hand sends no callback, it only enables OK, so set the same state on the component.
+    // True when it had to tick, so OK goes on the next pass.
+    private static bool TickProceed(AddonSelectYesno* dialog)
+    {
+        var box = dialog->ConfirmCheckBox;
+        var node = box == null ? null : box->AtkComponentButton.AtkComponentBase.OwnerNode;
+        if (node == null || !node->AtkResNode.IsVisible() || box->IsChecked) return false;
+        box->SetChecked(true);
+        dialog->YesButton->SetEnabledState(true);
+        Plugin.Log.Info("[shop] SelectYesno ticked Proceed");
+        return true;
     }
 
     private static AtkUnitBase* Shop() => Addon(ShopAddon);

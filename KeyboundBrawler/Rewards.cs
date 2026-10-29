@@ -27,6 +27,12 @@ public static class Rewards
         new("Fight On! Orchestrion Roll", 190, 3),
         new("Keybound Brawler Framer's Kit", 190, 3),
         new("Ballroom Etiquette - Intrepid Inputs", 260, 3),
-        new("Keybound Coffer", 910, 3),
+        new(Coffer, 910, 3),
     ];
+
+    // Can be bought again and again, in any amount, so it is never "got".
+    public const string Coffer = "Keybound Coffer";
+
+    // What one buy of this reward costs: the Coffer comes in the amount set in its row.
+    public static int Price(Reward r, Configuration cfg) => r.Name == Coffer ? r.Cost * cfg.CofferCount : r.Cost;
 }
