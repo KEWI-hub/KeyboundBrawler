@@ -1,0 +1,4 @@
+- New "Play rounds": set how many rounds, press Play, and it walks to the Keybound Registrar, joins, presses Commence, types the whole match, closes the result screen and goes again (needs vnavmesh)
+- Nothing to set up: the Registrar and the MGC Trader are built in, so "Use my target" is gone
+- Auto-play turns itself on during Play rounds, even with "Start when a match begins" off
+- Word log totals now count the whole session, not just the last 500 words

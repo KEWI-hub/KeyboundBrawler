@@ -42,7 +42,7 @@ public sealed class MatchWatcher : IDisposable
             if (InMatch)
             {
                 InMatch = false;
-                if (plugin.AutoPlayer.Enabled && plugin.Config.AutoStart)
+                if (plugin.AutoPlayer.Enabled && AutoStart)
                     plugin.AutoPlayer.Toggle();
             }
             return;
@@ -60,7 +60,7 @@ public sealed class MatchWatcher : IDisposable
             // Older builds saved the play-guide addon here; it only holds the key hint, never words.
             if (cfg.GameAddons.Remove(addon))
                 cfg.Save();
-            if (cfg.AutoStart && !plugin.AutoPlayer.Enabled)
+            if (AutoStart && !plugin.AutoPlayer.Enabled)
                 plugin.AutoPlayer.Toggle();
         }
 
@@ -78,6 +78,9 @@ public sealed class MatchWatcher : IDisposable
             }
         }
     }
+
+    // The round loop always lets auto-play type, whatever the checkbox says.
+    private bool AutoStart => plugin.Config.AutoStart || plugin.Rounds.Busy;
 
     private static string? FindMatchAddon() =>
         UiScanner.VisibleAddons()

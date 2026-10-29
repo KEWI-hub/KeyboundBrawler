@@ -36,6 +36,15 @@ Tick **Start auto-play when a match begins** and it starts and stops by itself.
 - Keeps the duty's inactivity timers, and the minigame's own idle timer, at zero while it types, so you are not expelled for "extended inactivity"
 - **Word log**: every word it sent this session, with hit, missed or dropped, and how many typos it had to fix
 
+## Play rounds
+
+Plays a set number of rounds back to back: walks to the Keybound Registrar with
+[vnavmesh](https://github.com/awgil/ffxiv_navmesh), joins, presses Commence, types the whole match, closes the
+result screen, and goes again.
+
+Be in the Gold Saucer event area, set the number of rounds, and press **Play N rounds**. Nothing to set up:
+the Registrar and the MGC Trader are built in.
+
 ## Tracker and rewards
 
 - Counts runs and MGC from chat, and shows how many runs you still need for the rewards you tick

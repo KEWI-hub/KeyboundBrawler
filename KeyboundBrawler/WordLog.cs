@@ -27,12 +27,19 @@ public sealed class WordLog
     private static readonly TimeSpan CheckAfter = TimeSpan.FromMilliseconds(150);
 
     private readonly List<WordEntry> entries = [];
+    // Session totals, kept apart from the list because old entries fall off it.
+    private readonly Dictionary<WordResult, int> counts = [];
 
     public IReadOnlyList<WordEntry> Entries => entries;
-    public int Count(WordResult result) => entries.Count(e => e.Result == result);
-    public int Fixes => entries.Sum(e => e.Fixes);
+    public int Count(WordResult result) => counts.GetValueOrDefault(result);
+    public int Fixes { get; private set; }
 
-    public void Clear() => entries.Clear();
+    public void Clear()
+    {
+        entries.Clear();
+        counts.Clear();
+        Fixes = 0;
+    }
 
     public void Sent(string word, nint key, bool hidden, int fixes) =>
         Add(new WordEntry { Time = DateTime.Now, Word = word, Key = key, Hidden = hidden, Fixes = fixes, Result = WordResult.Waiting });
@@ -48,10 +55,10 @@ public sealed class WordLog
         foreach (var e in entries)
         {
             if (e.Result != WordResult.Waiting || now - e.Time < CheckAfter) continue;
-            if (!onScreen.TryGetValue(e.Key, out var shown) || shown != e.Word) e.Result = WordResult.Hit;
+            if (!onScreen.TryGetValue(e.Key, out var shown) || shown != e.Word) Settle(e, WordResult.Hit);
             else if (now - e.Time > MissAfter)
             {
-                e.Result = WordResult.Miss;
+                Settle(e, WordResult.Miss);
                 Plugin.Log.Info($"[words] Miss \"{e.Word}\" still on screen");
             }
         }
@@ -62,12 +69,21 @@ public sealed class WordLog
     {
         var waiting = entries.Where(e => e.Result == WordResult.Waiting).ToList();
         if (waiting.Count == 0) return;
-        foreach (var e in waiting) e.Result = WordResult.Hit;
+        foreach (var e in waiting) Settle(e, WordResult.Hit);
         Plugin.Log.Info($"[words] totals: {Count(WordResult.Hit)} hit, {Count(WordResult.Miss)} missed, {Count(WordResult.Dropped)} dropped, {Fixes} typos fixed");
+    }
+
+    private void Settle(WordEntry e, WordResult result)
+    {
+        counts[e.Result] = Count(e.Result) - 1;
+        e.Result = result;
+        counts[result] = Count(result) + 1;
     }
 
     private void Add(WordEntry entry)
     {
+        counts[entry.Result] = Count(entry.Result) + 1;
+        Fixes += entry.Fixes;
         entries.Add(entry);
         if (entries.Count > MaxEntries) entries.RemoveAt(0);
         Plugin.Log.Info($"[words] {entry.Result} \"{entry.Word}\"{(entry.Hidden ? " (hidden)" : "")}{(entry.Fixes > 0 ? $" fixes={entry.Fixes}" : "")}");

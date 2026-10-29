@@ -7,11 +7,12 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace KeyboundBrawler;
 
-// Debug aid: while on, logs every callback and UI event the shop windows receive, so a purchase the
-// player makes by hand shows exactly what the plugin has to send. Nothing is changed, only logged.
+// Debug aid: while on, logs every callback and UI event the shop and brawler entry/exit windows receive, so a
+// click the player makes by hand shows exactly what the plugin has to send. Nothing is changed, only logged.
 public sealed unsafe class ShopRecorder : IDisposable
 {
-    private static readonly string[] Watched = ["ShopExchangeCurrency", "ShopExchangeCurrencyDialog", "SelectYesno", "InputNumeric"];
+    private static readonly string[] Watched = ["ShopExchangeCurrency", "ShopExchangeCurrencyDialog", "SelectYesno", "InputNumeric",
+        "KTGEnterDialogue", "ContentsFinderConfirm", "KTGResult", "SelectString", "Talk"];
 
     private delegate bool FireCallbackDelegate(AtkUnitBase* unit, uint count, AtkValue* values, bool close);
 

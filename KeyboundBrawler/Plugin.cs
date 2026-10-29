@@ -28,6 +28,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IClientState ClientState { get; private set; } = null!;
     [PluginService] internal static IGameInteropProvider GameInterop { get; private set; } = null!;
     [PluginService] internal static IAddonLifecycle AddonLifecycle { get; private set; } = null!;
+    [PluginService] internal static ICondition Condition { get; private set; } = null!;
 
     public Configuration Config { get; }
     public int SessionRuns { get; set; }
@@ -37,6 +38,8 @@ public sealed class Plugin : IDalamudPlugin
     public VendorRunner Vendor { get; }
     public ShopBuyer Shop { get; }
     public ShopRecorder Recorder { get; }
+    public Navmesh Nav { get; }
+    public RoundRunner Rounds { get; }
     private readonly AfkGuard afkGuard;
 
     // "/kbb debug" shows the UI scanner, which normal players do not need.
@@ -105,9 +108,11 @@ public sealed class Plugin : IDalamudPlugin
         mgcRegex = BuildRegex(Config.MgcPattern);
         AutoPlayer = new AutoPlayer(this);
         MatchWatcher = new MatchWatcher(this);
+        Nav = new Navmesh();
         Vendor = new VendorRunner(this);
         Shop = new ShopBuyer(this);
         Recorder = new ShopRecorder();
+        Rounds = new RoundRunner(this);
         afkGuard = new AfkGuard();
 
         mainWindow = new MainWindow(this);
@@ -127,6 +132,7 @@ public sealed class Plugin : IDalamudPlugin
     public void Dispose()
     {
         afkGuard.Dispose();
+        Rounds.Dispose();
         Recorder.Dispose();
         Shop.Dispose();
         Vendor.Dispose();

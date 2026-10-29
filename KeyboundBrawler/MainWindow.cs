@@ -90,6 +90,8 @@ public sealed class MainWindow : Window
         DrawMgcProgress(cfg);
 
         ImGui.Spacing();
+        if (ImGui.CollapsingHeader("Play rounds"))
+            DrawRounds(cfg);
         if (ImGui.CollapsingHeader("Rewards"))
         {
             DrawVendor(cfg);
@@ -250,13 +252,34 @@ public sealed class MainWindow : Window
         ImGui.TextDisabled($"{nextLine} Wish list: {goal.Count} rewards, {goal.Sum(r => r.Cost)} MGC.");
     }
 
+    // Round loop: walks to the Keybound Registrar, plays, leaves, and goes again.
+    private void DrawRounds(Configuration cfg)
+    {
+        var rounds = plugin.Rounds;
+        if (rounds.Busy)
+        {
+            if (ImGui.Button($"Stop (round {Math.Min(rounds.RoundsDone + 1, rounds.RoundsWanted)} of {rounds.RoundsWanted})", new Vector2(-1, 30)))
+                rounds.Stop();
+        }
+        else
+        {
+            var count = cfg.LoopRounds;
+            ImGui.SetNextItemWidth(120);
+            if (ImGui.InputInt("rounds", ref count)) { cfg.LoopRounds = Math.Clamp(count, 1, 999); cfg.Save(); }
+            ImGui.SameLine();
+            if (ImGui.Button($"Play {cfg.LoopRounds} rounds", new Vector2(-1, 0)))
+                rounds.Start(cfg.LoopRounds);
+        }
+        if (!Navmesh.Installed)
+            ImGui.TextDisabled("Needs the vnavmesh plugin to walk to the Keybound Registrar.");
+        if (rounds.Status.Length > 0)
+            ImGui.TextDisabled(rounds.Status);
+    }
+
     private void DrawVendor(Configuration cfg)
     {
         var vendor = plugin.Vendor;
-        ImGui.TextUnformatted(cfg.VendorBaseId == 0 ? "Vendor: not set" : $"Vendor: {cfg.VendorName}");
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Use my target"))
-            vendor.RememberTarget();
+        ImGui.TextUnformatted($"Vendor: {VendorRunner.VendorName}");
 
         var shop = plugin.Shop;
         if (vendor.Busy || shop.Busy)
@@ -273,7 +296,7 @@ public sealed class MainWindow : Window
         }
         var autoBuy = cfg.AutoBuy;
         if (ImGui.Checkbox("Buy wanted rewards when the shop opens", ref autoBuy)) { cfg.AutoBuy = autoBuy; cfg.Save(); }
-        if (!VendorRunner.VnavmeshInstalled)
+        if (!Navmesh.Installed)
             ImGui.TextDisabled("Needs the vnavmesh plugin to walk (talking works without it when you stand close).");
         if (vendor.Status.Length > 0)
             ImGui.TextDisabled(vendor.Status);
@@ -468,7 +491,8 @@ public sealed class MainWindow : Window
 
     private void DrawScanner(Configuration cfg)
     {
-        if (ImGui.Button(plugin.Recorder.Recording ? "Stop recording shop clicks" : "Record shop clicks"))
+        // Logs the clicks on the shop and on the brawler entry / exit windows as [rec] lines.
+        if (ImGui.Button(plugin.Recorder.Recording ? "Stop recording clicks" : "Record clicks (shop, entry, exit)"))
             plugin.Recorder.Toggle();
         ImGui.SameLine();
         if (ImGui.Button("Dump visible UI text to file"))
