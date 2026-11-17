@@ -91,6 +91,8 @@ public sealed class MainWindow : Window
         DrawSpeedChips(cfg);
         DrawStartButton();
         DrawQuickToggles(cfg);
+        if (plugin.AutoPlayer.Enabled && plugin.AutoPlayer.Players < 4 && cfg.CoverMissingPlayers)
+            ImGui.TextDisabled($"{plugin.AutoPlayer.Players} of 4 players: typing at {plugin.AutoPlayer.EffectiveWpm} WPM");
         DrawMgcProgress(cfg);
 
         ImGui.Spacing();
@@ -240,6 +242,16 @@ public sealed class MainWindow : Window
         ImGui.SameLine();
         var skip = cfg.SkipOptionalPunctuation;
         if (ImGui.Checkbox("Skip ? ! - '", ref skip)) { cfg.SkipOptionalPunctuation = skip; cfg.Save(); }
+
+        var rush = cfg.RushCastsMs > 0;
+        if (ImGui.Checkbox("Rush casters", ref rush)) { cfg.RushCastsMs = rush ? 500 : 0; cfg.Save(); }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Red and gold labels (bombs, Self-destruct, Needles): drop the current word\nand send theirs within 0.5 s of showing up.");
+        ImGui.SameLine();
+        var cover = cfg.CoverMissingPlayers;
+        if (ImGui.Checkbox("Cover missing players", ref cover)) { cfg.CoverMissingPlayers = cover; cfg.Save(); }
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip($"With fewer than 4 players, add {Configuration.PlayerWpm} WPM for each missing one.");
     }
 
     // Shows the next reward to save for (cheapest wanted one), then the whole wish list in one line.

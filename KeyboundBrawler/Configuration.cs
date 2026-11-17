@@ -36,6 +36,12 @@ public class Configuration : IPluginConfiguration
     public List<string> UrgentCasts { get; set; } = ["Needles", "Burst"];
     public TypingSpeed Speed { get; set; } = TypingSpeed.Human;
     public bool SkipOptionalPunctuation { get; set; } = true;
+    // Casters (red / gold labels: bombs, Self-destruct, Needles) drop whatever is being typed and are
+    // sent within this many ms of showing up. 0 turns it off.
+    public int RushCastsMs { get; set; } = 500;
+    // With fewer than 4 players in the match, type faster to cover each missing one at this many WPM.
+    public bool CoverMissingPlayers { get; set; } = true;
+    public const int PlayerWpm = 180;
 
     // Words per minute counts 5 letters as a word, so one letter takes 12000 / WPM ms. Enter is a key too,
     // but the 120 ms box-open wait already covers most of its share.
@@ -48,6 +54,10 @@ public class Configuration : IPluginConfiguration
         CharDelayMs = perKey;
         WordDelayMs = Math.Max(20, perKey - 120);
     }
+
+    // The chosen speed in WPM, also for Custom (a word counts as 5 letters plus Enter).
+    public int BaseWpm() => Speed != TypingSpeed.Custom ? Speed.Wpm()
+        : WordSeconds > 0 ? (int)(60 / WordSeconds) : 12000 / Math.Max(1, CharDelayMs);
 
     public int CharDelayMs { get; set; } = 200;
     // When above 0, letters are spread so each whole word takes about this long; CharDelayMs is then ignored.

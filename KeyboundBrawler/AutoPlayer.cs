@@ -48,6 +48,20 @@ public sealed class AutoPlayer : IDisposable
     private int typedCount;
     private DateTime nextAction = DateTime.MinValue;
 
+    // Casters' labels on screen, with when each first showed up. Keys are node addresses, which the game
+    // reuses for the next enemy, so an entry goes as soon as its label stops being a caster.
+    private const string PlayerNameAddon = "KTGPlayerName";
+    private const uint PlayerNameNode = 3;
+    private const int MinKeyGapMs = 25;
+    private readonly Dictionary<nint, DateTime> rushSeen = [];
+    private bool typingRush;
+    private DateTime rushDeadline;
+    private int players = 4;
+
+    // Players in the match, read from the name tags under the input box (4 when none can be read).
+    public int Players => players;
+    public int EffectiveWpm { get; private set; }
+
     public bool Enabled { get; set; }
     private string status = "Off";
 
@@ -101,6 +115,8 @@ public sealed class AutoPlayer : IDisposable
         {
             ResetTyping();
             remembered.Clear();
+            rushSeen.Clear();
+            players = 4;
             Words.MatchOver();
             hiddenDumps = 0;
             boxClosed = true;
@@ -110,10 +126,9 @@ public sealed class AutoPlayer : IDisposable
 
         var known = Remember(all);
         Words.Check(known.GroupBy(t => t.Key).ToDictionary(g => g.Key, g => g.First().Text.Trim()));
-        LastTargets = FindTargets(known, cfg);
-
         var now = DateTime.UtcNow;
-        if (now < nextAction) return;
+        LastTargets = FindTargets(known, cfg, now);
+        CountPlayers(cfg);
 
         // Never send a key while chat or any other text box has focus, or a phrase could land in chat.
         if (!GameInput.SafeToType())
@@ -131,6 +146,8 @@ public sealed class AutoPlayer : IDisposable
             return;
         }
 
+        if (RushCaster(cfg, now)) return;
+        if (now < nextAction) return;
         if (!SyncWithInputBox(now)) return;
 
         // The word we were typing disappeared (someone else killed it): clear what we typed and pick again.
@@ -164,6 +181,8 @@ public sealed class AutoPlayer : IDisposable
             }
             typing = next.Text;
             (typingKey, typingHidden, typingFixes) = (next.Key, !next.TextVisible, 0);
+            typingRush = rushSeen.TryGetValue(next.Key, out var seen) && cfg.RushCastsMs > 0;
+            rushDeadline = typingRush ? seen.AddMilliseconds(cfg.RushCastsMs) : DateTime.MaxValue;
             keys = cfg.SkipOptionalPunctuation ? OptionalPunctuation.Replace(typing, "") : typing;
             typedCount = 0;
 
@@ -173,7 +192,7 @@ public sealed class AutoPlayer : IDisposable
                 KeySender.Enter();
                 boxClosed = false;
                 Status = "Opening the input box";
-                Delay(OpenBoxDelayMs);
+                Delay(typingRush ? Math.Clamp(RushGap(now, keys.Length + 2), 40, OpenBoxDelayMs) : OpenBoxDelayMs);
                 return;
             }
         }
@@ -181,8 +200,9 @@ public sealed class AutoPlayer : IDisposable
         if (typedCount < keys.Length)
         {
             KeySender.Char(keys[typedCount++]);
-            Status = $"Typing \"{typing}\"";
-            Delay(cfg.WordSeconds > 0 ? (int)(cfg.WordSeconds * 1000 / (keys.Length + 1)) : cfg.CharDelayMs);
+            Status = typingRush ? $"Rushing \"{typing}\"" : $"Typing \"{typing}\"";
+            var perKey = Scaled(cfg.WordSeconds > 0 ? (int)(cfg.WordSeconds * 1000 / (keys.Length + 1)) : cfg.CharDelayMs);
+            Delay(typingRush ? Math.Clamp(RushGap(now, keys.Length - typedCount + 1), MinKeyGapMs, perKey) : perKey);
             return;
         }
 
@@ -191,8 +211,57 @@ public sealed class AutoPlayer : IDisposable
         recentlySent[typing] = now;
         Words.Sent(typing, typingKey, typingHidden, typingFixes);
         Status = $"Sent \"{typing}\"";
+        if (typingRush)
+            Plugin.Log.Info($"[auto] Rushed \"{typing}\" {(now - rushDeadline.AddMilliseconds(-cfg.RushCastsMs)).TotalMilliseconds:0} ms after it showed up");
         ResetTyping();
-        Delay(cfg.WordDelayMs);
+        Delay(Scaled(cfg.WordDelayMs));
+    }
+
+    // A caster's label is up and we are busy with something else: wipe what we typed so the next pick,
+    // which puts casters first, takes it right away. Returns true when it acted this tick.
+    private bool RushCaster(Configuration cfg, DateTime now)
+    {
+        if (cfg.RushCastsMs <= 0 || typingRush) return false;
+        var caster = LastTargets.FirstOrDefault(t => rushSeen.ContainsKey(t.Key) && !RecentlySent(t.Text, now));
+        if (caster.Text == null || caster.Text == typing) return false;
+
+        if (typing != null && typedCount > 0)
+        {
+            Words.Dropped(typing, typingKey, typingHidden, typingFixes);
+            for (var i = 0; i < typedCount; i++) KeySender.Backspace();
+            ResetTyping();
+            Status = $"Dropping the word for caster \"{caster.Text}\"";
+            Delay(MinKeyGapMs * 2);
+            return true;
+        }
+        // Not mid-word (between words or just opened the box): skip the wait and pick now.
+        ResetTyping();
+        nextAction = DateTime.MinValue;
+        return false;
+    }
+
+    // Time left until the rush deadline, spread over the keys still to send.
+    private int RushGap(DateTime now, int keysLeft) =>
+        (int)((rushDeadline - now).TotalMilliseconds / Math.Max(1, keysLeft));
+
+    // Fewer than 4 players: each missing one is covered at PlayerWpm, so the wait per key shrinks to match.
+    private int Scaled(int ms)
+    {
+        var baseWpm = Math.Max(1, plugin.Config.BaseWpm());
+        return Math.Max(MinKeyGapMs, ms * baseWpm / Math.Max(1, EffectiveWpm));
+    }
+
+    private void CountPlayers(Configuration cfg)
+    {
+        var seen = UiScanner.Texts(PlayerNameAddon).Count(t => t.NodeId == PlayerNameNode);
+        var now = seen is >= 1 and <= 4 ? seen : 4;
+        if (now != players)
+        {
+            players = now;
+            Plugin.Log.Info($"[auto] {players} player(s) in the match");
+        }
+        var baseWpm = cfg.BaseWpm();
+        EffectiveWpm = baseWpm + (cfg.CoverMissingPlayers ? (4 - players) * Configuration.PlayerWpm : 0);
     }
 
     // Compares the game's input box with what we think we typed. The box starts closed and needs Enter to
@@ -303,14 +372,13 @@ public sealed class AutoPlayer : IDisposable
     private static bool NearCast(UiText word, List<UiText> casts) =>
         casts.Any(c => Math.Abs(c.X - word.X) < 160 && c.Y - word.Y is > -20 and < 120);
 
-    private List<UiText> FindTargets(List<UiText> texts, Configuration cfg)
+    private List<UiText> FindTargets(List<UiText> texts, Configuration cfg, DateTime now)
     {
         var ignore = cfg.IgnoreWords;
         var ktgTexts = UiScanner.VisibleAddons().Where(n => n.StartsWith("KTG")).Distinct().SelectMany(UiScanner.Texts).ToList();
         // No-typing sign (Cursed Gaze, Sensory Jammer): only keys pressed from the moment the bar is full
         // until the gaze lands get punished, so keep typing while it fills and hold every key from 95 %
         // for 3.5 s. A key 0.25 s after the bar vanished was still punished in XeldarAlz's match logs.
-        var now = DateTime.UtcNow;
         var signBars = UiScanner.CastBars(CastBarAddon)
             .Where(b => GameInput.IsLetterlock(b.Name) || cfg.DangerCasts.Any(d => b.Name.Contains(d, StringComparison.OrdinalIgnoreCase)))
             .ToList();
@@ -333,27 +401,33 @@ public sealed class AutoPlayer : IDisposable
             UiScanner.DumpToFile(danger.Count > 0 ? "danger" : "urgent");
         }
         var height = ScreenHeight();
-        return texts
+        var targets = texts
             .Where(t => t.FontSize >= cfg.MinFontSize)
             .Select(t => t with { Text = t.Text.Trim() })
             .Where(t => t.Text.Length > 0 && !HudText.IsMatch(t.Text) && !ignore.Contains(t.Text))
             .Where(t => t.Y > cfg.TopIgnore * height && t.Y < cfg.BottomIgnore * height)
             .Where(t => !cfg.DangerCasts.Any(d => t.Text.Contains(d, StringComparison.OrdinalIgnoreCase)))
             .Where(t => !cfg.UrgentCasts.Contains(t.Text, StringComparer.OrdinalIgnoreCase))
-            // Barrier phrases first, then casters (red, then gold), then words we only remember,
-            // then closer enemies (lower on screen).
+            // Casters first (red, then gold: their cast blows up when the timer runs out), then barrier
+            // phrases, then words we only remember, then closer enemies (lower on screen).
             .OrderBy(t => Rank(t, urgent))
             .ThenBy(t => t.TextVisible)
             .ThenByDescending(t => t.Y)
             .ToList();
+
+        // Note when each caster label first showed up, for the rush deadline.
+        var casters = targets.Where(t => Rank(t, urgent) <= 1).Select(t => t.Key).ToHashSet();
+        foreach (var key in rushSeen.Keys.Where(k => !casters.Contains(k)).ToList()) rushSeen.Remove(key);
+        foreach (var key in casters) rushSeen.TryAdd(key, now);
+        return targets;
     }
 
     private static int Rank(UiText t, List<UiText> urgent) => t.Tint switch
     {
-        LabelTint.Green => 0,
-        LabelTint.Red => 1,
-        LabelTint.Gold => 2,
-        _ => NearCast(t, urgent) ? 2 : 3,
+        LabelTint.Red => 0,
+        LabelTint.Gold => 1,
+        LabelTint.Green => 2,
+        _ => NearCast(t, urgent) ? 1 : 3,
     };
 
     private static unsafe float ScreenHeight()
@@ -375,6 +449,7 @@ public sealed class AutoPlayer : IDisposable
     private void ResetTyping()
     {
         typing = null;
+        typingRush = false;
         keys = "";
         typedCount = 0;
     }

@@ -1,0 +1,2 @@
+- Rush casters (new tick, on by default): when a red or gold label shows up (bombs, Self-destruct, Needles), auto-play drops the word it is typing and sends the caster's word within 0.5 s. Casters now go before barrier phrases.
+- Cover missing players (new tick, on by default): with fewer than 4 players in the match, it types 180 WPM faster for each missing player. The window shows the speed it is using.

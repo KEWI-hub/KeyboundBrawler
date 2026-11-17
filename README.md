@@ -29,7 +29,9 @@ Tick **Start auto-play when a match begins** and it starts and stops by itself.
 - Speed presets: Human 60, DEV 100, Monkey 120, KEWI 180 WPM
 - Opens the input box with Enter before each word (the box closes after every submit)
 - Never types while chat or another text box has focus
-- Priority by label colour: green barrier phrases, then red, then gold casters, then the closest enemy
+- Priority by label colour: red, then gold casters, then green barrier phrases, then the closest enemy
+- **Rush casters**: when a red or gold label shows up (bombs, Self-destruct, Needles), drops the word in progress and sends the caster's word within 0.5 s
+- **Cover missing players**: with fewer than 4 players in the match, adds 180 WPM for each missing one
 - Cursed Gaze / Dynamic Sensory Jammer (the crossed-out keyboard sign): keeps typing while the cast bar fills, then holds every key while it lands
 - Finishes words the boss hides with its noise overlay, and remembers words before they get obscured
 - Optional: skip the punctuation the game does not require ( ? ! - ' )
