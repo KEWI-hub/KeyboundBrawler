@@ -46,6 +46,19 @@ public sealed class MainWindow : Window
         };
     }
 
+    // The title bar stays readable while the window is collapsed, so it carries the MGC and what is going on.
+    public override void Update()
+    {
+        var cfg = plugin.Config;
+        var auto = plugin.AutoPlayer;
+        var rounds = plugin.Rounds;
+        var parts = new List<string> { "Keybound Brawler Helper", $"{cfg.CurrentMgc:N0} MGC" };
+        if (rounds.Busy) parts.Add($"Round {Math.Min(rounds.RoundsDone + 1, rounds.RoundsWanted)}/{rounds.RoundsWanted}");
+        if (auto.Enabled && plugin.MatchWatcher.InMatch)
+            parts.Add(auto.Players < 4 && cfg.CoverMissingPlayers ? $"Typing {auto.EffectiveWpm} WPM ({auto.Players}/4 players)" : "Typing");
+        WindowName = string.Join("  ·  ", parts) + "###kbb";
+    }
+
     public override void PreDraw()
     {
         (ImGuiCol, Vector4)[] colors =
@@ -91,8 +104,6 @@ public sealed class MainWindow : Window
         DrawSpeedChips(cfg);
         DrawStartButton();
         DrawQuickToggles(cfg);
-        if (plugin.AutoPlayer.Enabled && plugin.AutoPlayer.Players < 4 && cfg.CoverMissingPlayers)
-            ImGui.TextDisabled($"{plugin.AutoPlayer.Players} of 4 players: typing at {plugin.AutoPlayer.EffectiveWpm} WPM");
         DrawMgcProgress(cfg);
 
         ImGui.Spacing();
@@ -146,15 +157,9 @@ public sealed class MainWindow : Window
 
     private void DrawTypingCard()
     {
+        // Always the same height, so the window does not jump between words.
         var auto = plugin.AutoPlayer;
-        if (!auto.Enabled || auto.CurrentWord == null)
-        {
-            var next = auto.LastTargets.Take(4).Select(t => t.Text).ToList();
-            ImGui.TextDisabled(next.Count > 0 ? "On screen: " + string.Join(" · ", next)
-                : auto.Enabled ? auto.Status : "Press Start, or tick \"Start when a match begins\".");
-            return;
-        }
-        ImGui.BeginChild("card", new Vector2(-1, 70), true);
+        ImGui.BeginChild("card", new Vector2(-1, 70), true, ImGuiWindowFlags.NoScrollbar);
 
         var word = auto.CurrentWord;
         if (auto.Enabled && word != null)
@@ -171,7 +176,7 @@ public sealed class MainWindow : Window
             if (next.Count > 0)
                 ImGui.TextDisabled("On screen: " + string.Join(" · ", next));
             else
-                ImGui.TextDisabled("Tick \"Start when a match begins\" and queue up.");
+                ImGui.TextDisabled(auto.Enabled ? "Nothing on screen yet." : "Press Start, or tick \"Start when a match begins\".");
         }
 
         ImGui.EndChild();

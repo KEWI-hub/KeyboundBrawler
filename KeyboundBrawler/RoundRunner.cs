@@ -24,7 +24,7 @@ public sealed unsafe class RoundRunner : IDisposable
     private const ushort EntryTerritory = 1360;
 
     // Join button, then Commence on the duty pop. Leaving is the result screen's close button.
-    private static readonly Click[] EntryClicks = [new("KTGEnterDialogue", 0), new("ContentsFinderConfirm", 8)];
+    private static readonly Click[] EntryClicks = [new("KTGEnterDialogue", 0), new(PopAddon, CommenceValue)];
     private static readonly Click[] ExitClicks = [new("KTGResult", -1)];
 
     private const float TalkRange = 3.5f;
@@ -49,6 +49,16 @@ public sealed unsafe class RoundRunner : IDisposable
     private DateTime stepStarted;
     private int clickIndex;
     private int talks;
+    // A member who withdraws after we accepted sends the duty pop again: accept that one too. If we fall
+    // out of the queue anyway (e.g. the pop ran out), queue again a few times.
+    private const string PopAddon = "ContentsFinderConfirm";
+    private const int CommenceValue = 8;
+    private static readonly TimeSpan OutOfQueueGrace = TimeSpan.FromSeconds(10);
+    private const int Requeues = 3;
+    private bool popAnswered;
+    private DateTime? popSince;
+    private DateTime? outOfQueueSince;
+    private int requeues;
 
     public string Status { get; private set; } = "";
     public bool Busy => step != Step.Idle;
@@ -132,12 +142,19 @@ public sealed unsafe class RoundRunner : IDisposable
                     break;
                 }
                 if (Replay(EntryClicks, elapsed))
+                {
+                    (popAnswered, popSince, outOfQueueSince) = (true, null, null);
                     SetStep(Step.WaitMatch, "Waiting for the match to start");
+                }
                 break;
 
             case Step.WaitMatch:
-                if (inMatch) SetStep(Step.Playing, $"Round {RoundsDone + 1} of {RoundsWanted}: playing");
-                else if (elapsed > QueueTimeout) Fail("The match did not start.");
+                if (inMatch)
+                {
+                    requeues = 0;
+                    SetStep(Step.Playing, $"Round {RoundsDone + 1} of {RoundsWanted}: playing");
+                }
+                else WaitForMatch(elapsed);
                 break;
 
             case Step.Playing:
@@ -200,6 +217,35 @@ public sealed unsafe class RoundRunner : IDisposable
         SetStep(Step.Shopping, $"MGC near the cap ({plugin.Config.CurrentMgc}), shopping");
     }
 
+    private void WaitForMatch(TimeSpan elapsed)
+    {
+        var now = DateTime.UtcNow;
+        var pop = Addon(PopAddon);
+        if (pop == null) (popAnswered, popSince) = (false, null);
+        else if (!popAnswered)
+        {
+            popSince ??= now;
+            if (now - popSince.Value < ClickDelay) return;
+            Fire(pop, PopAddon, CommenceValue);
+            popAnswered = true;
+            stepStarted = now;
+            Plugin.Log.Info("[rounds] Duty popped again (a member withdrew), accepted it");
+            return;
+        }
+
+        var queued = pop != null || Plugin.Condition[ConditionFlag.InDutyQueue] || Plugin.Condition[ConditionFlag.BoundByDuty] || !CanAct;
+        if (queued) outOfQueueSince = null;
+        else if ((outOfQueueSince ??= now) + OutOfQueueGrace < now)
+        {
+            if (requeues++ >= Requeues) { Fail("Dropped out of the duty queue."); return; }
+            Plugin.Log.Info($"[rounds] Not in the duty queue any more, queueing again ({requeues} of {Requeues})");
+            GoToNpc();
+            return;
+        }
+
+        if (elapsed > QueueTimeout) Fail("The match did not start.");
+    }
+
     private void AfterRound()
     {
         if (RoundsDone >= RoundsWanted) SetStep(Step.Idle, $"Finished {RoundsDone} rounds.");
@@ -214,20 +260,25 @@ public sealed unsafe class RoundRunner : IDisposable
         var unit = Addon(click.Addon);
         if (unit == null)
         {
-            var limit = click.Addon == "ContentsFinderConfirm" || step == Step.Exiting ? QueueTimeout : WindowTimeout;
+            var limit = click.Addon == PopAddon || step == Step.Exiting ? QueueTimeout : WindowTimeout;
             if (elapsed > limit) Fail($"{click.Addon} did not open.");
             return false;
         }
         if (elapsed < ClickDelay) return false;
 
-        var value = stackalloc AtkValue[1];
-        value->Type = AtkValueType.Int;
-        value->Int = click.Value;
-        unit->FireCallback(1, value, true);
-        Plugin.Log.Info($"[rounds] sent {click.Addon} [{click.Value}]");
+        Fire(unit, click.Addon, click.Value);
         clickIndex++;
         stepStarted = DateTime.UtcNow;
         return clickIndex >= clicks.Length;
+    }
+
+    private static void Fire(AtkUnitBase* unit, string name, int callback)
+    {
+        var value = stackalloc AtkValue[1];
+        value->Type = AtkValueType.Int;
+        value->Int = callback;
+        unit->FireCallback(1, value, true);
+        Plugin.Log.Info($"[rounds] sent {name} [{callback}]");
     }
 
     private static AtkUnitBase* Addon(string name)

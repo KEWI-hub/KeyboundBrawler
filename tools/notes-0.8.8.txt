@@ -1,0 +1,3 @@
+- Play rounds: when a party member withdraws after you accepted, the duty pops again. It now accepts that second pop too (before, the pop ran out and you got a penalty). If you still drop out of the queue, it queues again, up to 3 times.
+- The title bar shows your MGC, the round and the typing speed, so you can keep the window collapsed.
+- The typing card keeps one height, so the window no longer jumps up and down between words.

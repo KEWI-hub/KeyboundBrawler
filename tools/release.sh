@@ -12,7 +12,7 @@ notes="${3:-}"
 zip=KeyboundBrawler/bin/x64/Release/KeyboundBrawler/latest.zip
 
 sed -i "s#<Version>[^<]*</Version>#<Version>${version}</Version>#" KeyboundBrawler/KeyboundBrawler.csproj
-python -I - "$version" "$channel" <<'EOF'
+py -I - "$version" "$channel" <<'EOF'
 import json, sys, time
 version, channel = sys.argv[1], sys.argv[2]
 repo = json.load(open("repo.json", encoding="utf-8"))
